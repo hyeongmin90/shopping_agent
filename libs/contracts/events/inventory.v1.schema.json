@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InventoryEvents",
+  "description": "Event schemas for inventory domain",
+  "definitions": {
+    "ReserveInventoryCommand": {
+      "type": "object",
+      "required": ["orderId", "items"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["productId", "quantity"],
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "variantId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "InventoryReserved": {
+      "type": "object",
+      "required": ["orderId", "reservationId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reservationId": { "type": "string", "format": "uuid" },
+        "reservedItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer" },
+              "reservedUntil": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    "InventoryReservationFailed": {
+      "type": "object",
+      "required": ["orderId", "reason"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reason": { "type": "string" },
+        "unavailableItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "requestedQuantity": { "type": "integer" },
+              "availableQuantity": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "CommitInventoryCommand": {
+      "type": "object",
+      "required": ["orderId", "reservationId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reservationId": { "type": "string", "format": "uuid" }
+      }
+    },
+    "CancelInventoryReservationCommand": {
+      "type": "object",
+      "required": ["orderId", "reservationId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reservationId": { "type": "string", "format": "uuid" }
+      }
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PaymentEvents",
+  "description": "Event schemas for payment domain",
+  "definitions": {
+    "AuthorizePaymentCommand": {
+      "type": "object",
+      "required": ["orderId", "userId", "amount", "currency"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "amount": { "type": "integer", "description": "Amount in cents" },
+        "currency": { "type": "string", "default": "KRW" },
+        "paymentMethod": { "type": "string", "enum": ["CARD", "BANK_TRANSFER", "MOCK"] }
+      }
+    },
+    "PaymentAuthorized": {
+      "type": "object",
+      "required": ["orderId", "paymentId", "authorizedAmount"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentId": { "type": "string", "format": "uuid" },
+        "authorizedAmount": { "type": "integer" },
+        "authorizationCode": { "type": "string" }
+      }
+    },
+    "PaymentAuthorizationFailed": {
+      "type": "object",
+      "required": ["orderId", "reason"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reason": { "type": "string" },
+        "errorCode": { "type": "string" }
+      }
+    },
+    "CapturePaymentCommand": {
+      "type": "object",
+      "required": ["orderId", "paymentId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentId": { "type": "string", "format": "uuid" },
+        "captureAmount": { "type": "integer" }
+      }
+    },
+    "PaymentCaptured": {
+      "type": "object",
+      "required": ["orderId", "paymentId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentId": { "type": "string", "format": "uuid" },
+        "capturedAmount": { "type": "integer" },
+        "capturedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "VoidPaymentCommand": {
+      "type": "object",
+      "required": ["orderId", "paymentId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentId": { "type": "string", "format": "uuid" },
+        "reason": { "type": "string" }
+      }
+    },
+    "RefundPaymentCommand": {
+      "type": "object",
+      "required": ["orderId", "paymentId", "refundAmount"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentId": { "type": "string", "format": "uuid" },
+        "refundAmount": { "type": "integer" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

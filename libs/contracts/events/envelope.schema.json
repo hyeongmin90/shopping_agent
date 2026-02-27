@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EventEnvelope",
+  "description": "Standard event envelope for all Kafka messages across shopping agent services",
+  "type": "object",
+  "required": ["meta", "data"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["eventId", "eventType", "schemaVersion", "occurredAt", "producer", "correlationId"],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for this event"
+        },
+        "eventType": {
+          "type": "string",
+          "description": "Type of event (e.g., OrderPlaced, InventoryReserved)"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version for backward compatibility"
+        },
+        "occurredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when the event occurred"
+        },
+        "producer": {
+          "type": "string",
+          "description": "Service that produced this event"
+        },
+        "correlationId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Correlation ID for tracing across services"
+        },
+        "causationId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the event that caused this event"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Key for idempotent processing"
+        },
+        "traceparent": {
+          "type": "string",
+          "description": "W3C trace context propagation"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "Event-specific payload"
+    }
+  }
+}

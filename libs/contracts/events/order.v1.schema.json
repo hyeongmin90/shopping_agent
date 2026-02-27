@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrderEvents",
+  "description": "Event schemas for order domain",
+  "definitions": {
+    "OrderCreated": {
+      "type": "object",
+      "required": ["orderId", "userId", "items", "status"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["productId", "quantity", "unitPrice"],
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "variantId": { "type": "string", "format": "uuid" },
+              "productName": { "type": "string" },
+              "quantity": { "type": "integer", "minimum": 1 },
+              "unitPrice": { "type": "integer", "description": "Price in cents" }
+            }
+          }
+        },
+        "status": { "type": "string", "enum": ["DRAFT", "PENDING_APPROVAL", "PLACED", "CONFIRMED", "FAILED", "CANCELLED"] },
+        "totalAmount": { "type": "integer", "description": "Total in cents" },
+        "currency": { "type": "string", "default": "KRW" }
+      }
+    },
+    "OrderPlaced": {
+      "type": "object",
+      "required": ["orderId", "userId", "totalAmount"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "totalAmount": { "type": "integer" },
+        "currency": { "type": "string" }
+      }
+    },
+    "OrderConfirmed": {
+      "type": "object",
+      "required": ["orderId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "confirmedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "OrderFailed": {
+      "type": "object",
+      "required": ["orderId", "reason"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "reason": { "type": "string" },
+        "failedStep": { "type": "string", "enum": ["INVENTORY_RESERVATION", "PAYMENT_AUTHORIZATION", "PAYMENT_CAPTURE"] }
+      }
+    },
+    "OrderCancelled": {
+      "type": "object",
+      "required": ["orderId"],
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "cancelledBy": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}
