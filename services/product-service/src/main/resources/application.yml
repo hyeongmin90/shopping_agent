@@ -1,0 +1,83 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/product_db
+    username: product_user
+    password: product_pass
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2s
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      retries: 3
+  cache:
+    type: redis
+    redis:
+      time-to-live: 5m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4317
+
+logging:
+  level:
+    root: INFO
+    com.shopping.product: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] [%X{traceId:-}] [%X{spanId:-}] %logger{36} - %msg%n"
+
+app:
+  kafka:
+    topics:
+      product-viewed: product.viewed.v1
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres-product:5432/product_db
+    username: product_user
+    password: product_pass
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: redis
+      port: 6379
+  kafka:
+    bootstrap-servers: kafka:29092
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317
