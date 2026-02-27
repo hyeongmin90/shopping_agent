@@ -1,0 +1,78 @@
+-- Inventory Service Database Schema + Seed Data
+
+CREATE TABLE IF NOT EXISTS inventory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL,
+    variant_id UUID NOT NULL,
+    sku VARCHAR(50) UNIQUE NOT NULL,
+    total_quantity INTEGER NOT NULL DEFAULT 0,
+    reserved_quantity INTEGER NOT NULL DEFAULT 0,
+    available_quantity INTEGER GENERATED ALWAYS AS (total_quantity - reserved_quantity) STORED,
+    low_stock_threshold INTEGER DEFAULT 5,
+    version INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inventory Reservations
+CREATE TABLE IF NOT EXISTS inventory_reservations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_reservation_status CHECK (status IN ('ACTIVE', 'COMMITTED', 'CANCELLED', 'EXPIRED'))
+);
+
+CREATE TABLE IF NOT EXISTS inventory_reservation_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reservation_id UUID NOT NULL REFERENCES inventory_reservations(id),
+    inventory_id UUID NOT NULL REFERENCES inventory(id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0)
+);
+
+-- Idempotency Store
+CREATE TABLE IF NOT EXISTS idempotency_store (
+    consumer_id VARCHAR(100) NOT NULL,
+    event_id UUID NOT NULL,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (consumer_id, event_id)
+);
+
+CREATE INDEX idx_inventory_product ON inventory(product_id, variant_id);
+CREATE INDEX idx_inventory_sku ON inventory(sku);
+CREATE INDEX idx_reservations_order ON inventory_reservations(order_id);
+CREATE INDEX idx_reservations_status ON inventory_reservations(status, expires_at);
+
+-- ============================================================
+-- Seed Inventory Data
+-- ============================================================
+
+INSERT INTO inventory (product_id, variant_id, sku, total_quantity, reserved_quantity) VALUES
+    -- 오버핏 코튼 티셔츠
+    ('b1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000001', 'MSS-CT-BK-S', 50, 0),
+    ('b1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000002', 'MSS-CT-BK-M', 100, 0),
+    ('b1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000003', 'MSS-CT-BK-L', 80, 0),
+    ('b1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000004', 'MSS-CT-WH-M', 90, 0),
+    ('b1000000-0000-0000-0000-000000000001', 'c1000000-0000-0000-0000-000000000005', 'MSS-CT-WH-L', 70, 0),
+    -- 슬림핏 옥스포드 셔츠
+    ('b1000000-0000-0000-0000-000000000002', 'c1000000-0000-0000-0000-000000000006', 'PLO-OX-WH-M', 30, 0),
+    ('b1000000-0000-0000-0000-000000000002', 'c1000000-0000-0000-0000-000000000007', 'PLO-OX-WH-L', 25, 0),
+    ('b1000000-0000-0000-0000-000000000002', 'c1000000-0000-0000-0000-000000000008', 'PLO-OX-BL-M', 35, 0),
+    -- 데님 팬츠
+    ('b1000000-0000-0000-0000-000000000004', 'c1000000-0000-0000-0000-000000000009', 'LV-DN-IN-30', 40, 0),
+    ('b1000000-0000-0000-0000-000000000004', 'c1000000-0000-0000-0000-000000000010', 'LV-DN-IN-32', 45, 0),
+    ('b1000000-0000-0000-0000-000000000004', 'c1000000-0000-0000-0000-000000000011', 'LV-DN-BK-32', 35, 0),
+    -- 스마트폰
+    ('b1000000-0000-0000-0000-000000000008', 'c1000000-0000-0000-0000-000000000012', 'SS-S24U-256-TN', 15, 0),
+    ('b1000000-0000-0000-0000-000000000008', 'c1000000-0000-0000-0000-000000000013', 'SS-S24U-512-TN', 10, 0),
+    ('b1000000-0000-0000-0000-000000000009', 'c1000000-0000-0000-0000-000000000014', 'AP-I15P-256-NT', 20, 0),
+    ('b1000000-0000-0000-0000-000000000009', 'c1000000-0000-0000-0000-000000000015', 'AP-I15P-512-BK', 8, 0),
+    -- 노트북
+    ('b1000000-0000-0000-0000-000000000010', 'c1000000-0000-0000-0000-000000000016', 'AP-MBA-M3-8-256', 12, 0),
+    ('b1000000-0000-0000-0000-000000000010', 'c1000000-0000-0000-0000-000000000017', 'AP-MBA-M3-16-512', 6, 0),
+    -- 에어팟 프로
+    ('b1000000-0000-0000-0000-000000000012', 'c1000000-0000-0000-0000-000000000018', 'AP-APP2-WH', 60, 0),
+    -- 신발
+    ('b1000000-0000-0000-0000-000000000015', 'c1000000-0000-0000-0000-000000000019', 'NK-AF1-WH-260', 25, 0),
+    ('b1000000-0000-0000-0000-000000000015', 'c1000000-0000-0000-0000-000000000020', 'NK-AF1-WH-270', 30, 0),
+    ('b1000000-0000-0000-0000-000000000015', 'c1000000-0000-0000-0000-000000000021', 'NK-AF1-WH-280', 20, 0);
