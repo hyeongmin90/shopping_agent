@@ -1,0 +1,71 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    url: jdbc:postgresql://localhost:5435/inventory_db
+    username: inventory_user
+    password: inventory_pass
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: inventory-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cache:
+    type: redis
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+
+app:
+  reservation:
+    ttl-minutes: 15
+  kafka:
+    topics:
+      commands: inventory.commands
+      events: inventory.events
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres-inventory:5432/inventory_db
+  kafka:
+    bootstrap-servers: kafka:29092
+  data:
+    redis:
+      host: redis
+management:
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
