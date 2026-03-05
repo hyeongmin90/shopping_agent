@@ -1,4 +1,4 @@
-"""LangGraph tool definitions wrapping backend service calls."""
+"""LangGraph tool definitions wrapping backend service calls and RAG searches."""
 
 import json
 from typing import Optional
@@ -6,6 +6,9 @@ from typing import Optional
 from langchain_core.tools import tool
 
 from app.tools import service_clients as sc
+from app.rag.product_rag import search_products_rag
+from app.rag.review_rag import search_reviews_rag
+from app.rag.policy_rag import search_policies_rag
 
 import structlog
 
@@ -393,4 +396,119 @@ ORDER_TOOLS = [
 ]
 INVENTORY_TOOLS = [check_inventory, get_product_stock]
 
-ALL_TOOLS = PRODUCT_TOOLS + REVIEW_TOOLS + CART_TOOLS + ORDER_TOOLS + INVENTORY_TOOLS
+
+
+# ============================================================
+# RAG Tools (Hybrid Search)
+# ============================================================
+
+@tool
+async def rag_search_products(
+    query: str,
+    category: Optional[str] = None,
+    brand: Optional[str] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+) -> str:
+    """Search products using hybrid retrieval (keyword + semantic vector search).
+
+    This tool combines OpenSearch keyword matching with Qdrant vector similarity
+    for comprehensive product discovery. Keyword results are prioritized.
+    Use this for natural language queries like '여름에 입기 좋은 시원한 옷' or
+    '노이즈 캔슬링 이어폰 추천'.
+
+    Args:
+        query: Natural language search query
+        category: Optional category name to filter (e.g., '남성의류', '전자기기')
+        brand: Optional brand name to filter
+        min_price: Optional minimum price in KRW
+        max_price: Optional maximum price in KRW
+
+    Returns:
+        JSON string of matching products with relevance scores
+    """
+    try:
+        results = await search_products_rag(
+            query=query,
+            category=category,
+            brand=brand,
+            min_price=min_price,
+            max_price=max_price,
+        )
+        return json.dumps(results, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@tool
+async def rag_search_reviews(
+    query: str,
+    product_id: Optional[str] = None,
+    min_rating: Optional[int] = None,
+    verified_only: bool = False,
+) -> str:
+    """Search product reviews using semantic vector search.
+
+    Uses AI embeddings to understand the meaning behind review queries.
+    For example, '사이즈가 작나요?' will find reviews mentioning sizing issues
+    even without exact keyword matches. Ideal for nuanced questions about
+    product quality, comfort, durability, etc.
+
+    Args:
+        query: Natural language query about reviews (e.g., '여름에 시원한가요?', '내구성은 어떤가요?')
+        product_id: Optional product UUID to filter reviews for a specific product
+        min_rating: Optional minimum rating filter (1-5)
+        verified_only: If True, only return verified purchase reviews
+
+    Returns:
+        JSON string of semantically matching reviews with metadata
+    """
+    try:
+        results = await search_reviews_rag(
+            query=query,
+            product_id=product_id,
+            min_rating=min_rating,
+            verified_only=verified_only,
+        )
+        return json.dumps(results, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@tool
+async def rag_search_policies(
+    query: str,
+    category: Optional[str] = None,
+) -> str:
+    """Search store policies using balanced hybrid search (keyword + semantic).
+
+    Searches refund policies, shipping policies, terms of service, privacy policy,
+    membership benefits, warranty information, and customer service guidelines.
+    Combines exact term matching with semantic understanding for best results.
+
+    Args:
+        query: Policy question (e.g., '환불 기한이 어떻게 되나요?', '배송비 무료 조건')
+        category: Optional policy category filter (e.g., 'refund', 'shipping', 'terms')
+
+    Returns:
+        JSON string of matching policy documents
+    """
+    try:
+        results = await search_policies_rag(
+            query=query,
+            category=category,
+        )
+        return json.dumps(results, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+# RAG Tool Groups
+RAG_PRODUCT_TOOLS = [rag_search_products]
+RAG_REVIEW_TOOLS = [rag_search_reviews]
+RAG_POLICY_TOOLS = [rag_search_policies]
+
+ALL_TOOLS = (
+    PRODUCT_TOOLS + REVIEW_TOOLS + CART_TOOLS + ORDER_TOOLS + INVENTORY_TOOLS
+    + RAG_PRODUCT_TOOLS + RAG_REVIEW_TOOLS + RAG_POLICY_TOOLS
+)
