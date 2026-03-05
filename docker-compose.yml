@@ -438,6 +438,33 @@ services:
     networks:
       - shopping-net
 
+  # ============================================================
+  # API Gateway (Single Entry Point)
+  # ============================================================
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: shopping-gateway
+    ports:
+      - "80:80"
+    depends_on:
+      agent-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      review-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    networks:
+      - shopping-net
+
 networks:
   shopping-net:
     driver: bridge
