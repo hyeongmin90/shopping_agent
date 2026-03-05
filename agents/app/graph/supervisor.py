@@ -53,8 +53,8 @@ def _create_supervisor_node():
     """Create the supervisor routing node."""
     llm = ChatOpenAI(
         model=settings.OPENAI_MODEL,
-        temperature=0,
         api_key=settings.OPENAI_API_KEY,
+        temperature=1,
     )
 
     def supervisor(state: AgentState) -> dict:
@@ -321,7 +321,7 @@ async def run_agent(
         "current_order_id": context.get("current_order_id") or order_id,
         "cart_items": context.get("cart_items", []),
         "search_results": None,
-        "review_analysis": None,
+        "review_analysis_result": None,
         "inventory_status": None,
         "requires_approval": False,
         "approval_data": None,

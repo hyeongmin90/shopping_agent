@@ -40,8 +40,8 @@ def setup_tracing():
     trace.set_tracer_provider(provider)
 
     # Auto-instrument FastAPI and HTTPX
-    FastAPIInstrumentor.instrument()
-    HTTPXClientInstrumentor.instrument()
+    FastAPIInstrumentor().instrument()
+    HTTPXClientInstrumentor().instrument()
 
     logger.info("OpenTelemetry tracing initialized")
 

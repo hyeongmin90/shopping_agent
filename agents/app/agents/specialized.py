@@ -15,7 +15,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-def _get_llm(temperature: float = 0.1):
+def _get_llm(temperature: float = 1):
     """Get LLM instance."""
     return ChatOpenAI(
         model=settings.OPENAI_MODEL,

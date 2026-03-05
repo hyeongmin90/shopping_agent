@@ -20,13 +20,13 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @Query("""
         select p from Product p
         where (:categoryId is null or p.category.id = :categoryId)
-          and (:brand is null or lower(p.brand) = lower(:brand))
+          and (:brand is null or lower(cast(:brand as string)) = lower(p.brand))
           and (:minPrice is null or p.basePrice >= :minPrice)
           and (:maxPrice is null or p.basePrice <= :maxPrice)
           and (
-            :keyword is null or :keyword = ''
-            or lower(p.name) like lower(concat('%', :keyword, '%'))
-            or lower(coalesce(p.description, '')) like lower(concat('%', :keyword, '%'))
+            :keyword is null or cast(:keyword as string) = ''
+            or lower(p.name) like lower(concat('%', cast(:keyword as string), '%'))
+            or lower(coalesce(p.description, '')) like lower(concat('%', cast(:keyword as string), '%'))
           )
         """)
     Page<Product> searchProducts(

@@ -30,7 +30,7 @@ class AgentState(TypedDict):
 
     # Agent working memory
     search_results: Optional[list]
-    review_analysis: Optional[dict]
+    review_analysis_result: Optional[dict]
     inventory_status: Optional[dict]
 
     # Control flow

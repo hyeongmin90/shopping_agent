@@ -79,7 +79,7 @@ public class OrderService {
         order.getItems().add(item);
 
         recalculateTotal(order);
-        orderRepository.save(order);
+        orderRepository.flush();
         return toResponse(order);
     }
 

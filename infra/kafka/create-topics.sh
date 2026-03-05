@@ -49,6 +49,11 @@ kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
   --topic product.events --partitions 3 --replication-factor 1 \
   --config retention.ms=604800000
 
+# Product viewed events (triggered when users view product details)
+kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
+  --topic product.viewed.v1 --partitions 3 --replication-factor 1 \
+  --config retention.ms=604800000
+
 # Review domain
 kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 \
   --topic review.events --partitions 3 --replication-factor 1 \

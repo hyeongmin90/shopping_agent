@@ -30,6 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReviewService {
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("rating", "createdAt", "helpfulCount");
+    private static final Map<String, String> JPA_TO_COLUMN = Map.of(
+            "createdAt", "created_at",
+            "helpfulCount", "helpful_count",
+            "rating", "rating"
+    );
     private final ReviewRepository reviewRepository;
 
     @Transactional(readOnly = true)
@@ -91,7 +96,7 @@ public class ReviewService {
         if (request.getKeyword() == null || request.getKeyword().trim().isEmpty()) {
             throw new IllegalArgumentException("keyword must not be blank");
         }
-        Pageable pageable = buildPageable(request.getPage(), request.getSize(), request.getSortBy(), request.getDirection());
+        Pageable pageable = buildNativePageable(request.getPage(), request.getSize(), request.getSortBy(), request.getDirection());
         Page<Review> reviews = reviewRepository.searchByKeywordWithinProduct(
                 request.getProductId(),
                 request.getKeyword().trim(),
@@ -130,6 +135,16 @@ public class ReviewService {
 
         Sort.Direction sortDirection = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
         return PageRequest.of(page, size, Sort.by(sortDirection, normalizedSortBy));
+    }
+
+    private Pageable buildNativePageable(int page, int size, String sortBy, String direction) {
+        String normalizedSortBy = sortBy == null ? "createdAt" : sortBy;
+        if (!ALLOWED_SORT_FIELDS.contains(normalizedSortBy)) {
+            throw new IllegalArgumentException("Unsupported sortBy: " + normalizedSortBy);
+        }
+        String columnName = JPA_TO_COLUMN.getOrDefault(normalizedSortBy, normalizedSortBy);
+        Sort.Direction sortDirection = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return PageRequest.of(page, size, Sort.by(sortDirection, columnName));
     }
 
     private void validateRatingRange(Integer minRating, Integer maxRating) {

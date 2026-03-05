@@ -13,6 +13,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.JdbcTypeCode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,7 @@ public class OrderEntity {
 
     private String currency;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "shipping_address", columnDefinition = "jsonb")
     private String shippingAddress;
 
