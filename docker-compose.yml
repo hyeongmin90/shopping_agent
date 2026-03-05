@@ -439,17 +439,23 @@ services:
       - shopping-net
 
   # ============================================================
-  # API Gateway (Single Entry Point)
+  # API Gateway (Spring Cloud Gateway)
   # ============================================================
 
   gateway:
     build:
-      context: ./gateway
+      context: ./services/gateway-service
       dockerfile: Dockerfile
     container_name: shopping-gateway
     ports:
-      - "80:80"
+      - "80:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=gateway-service
     depends_on:
+      redis:
+        condition: service_healthy
       agent-service:
         condition: service_started
       product-service:

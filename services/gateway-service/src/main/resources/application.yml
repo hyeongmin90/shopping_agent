@@ -1,0 +1,241 @@
+server:
+  port: 8080
+  netty:
+    connection-timeout: 10s
+  codec:
+    max-in-memory-size: 5MB
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 10000
+        response-timeout: 120s
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 10
+            redis-rate-limiter.burstCapacity: 20
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@ipKeyResolver}"
+      routes:
+        # --- Health check ---
+        - id: health
+          uri: http://localhost:8000
+          predicates:
+            - Path=/health
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 20
+
+        # --- Agent Service: chat, approve, docs ---
+        - id: agent-chat
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/chat
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 5
+
+        - id: agent-approve
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/approve
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 5
+
+        - id: agent-docs
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/docs
+          filters:
+            - RewritePath=/api/docs, /docs
+
+        - id: agent-openapi
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/openapi.json
+          filters:
+            - RewritePath=/api/openapi.json, /openapi.json
+
+        # --- Product Service ---
+        - id: products
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/products/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 20
+
+        - id: categories
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/categories/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 20
+
+        # --- Review Service ---
+        - id: reviews
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/reviews/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 20
+
+        # --- Order Service ---
+        - id: orders
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 10
+
+        # --- Inventory Service ---
+        - id: inventory
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/inventory/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 20
+
+        # --- Payment Service ---
+        - id: payments
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 10
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+    gateway:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4317
+
+logging:
+  level:
+    root: INFO
+    com.shopping.gateway: INFO
+    org.springframework.cloud.gateway: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] [%X{traceId:-}] [%X{spanId:-}] %logger{36} - %msg%n"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  cloud:
+    gateway:
+      routes:
+        # --- Health check ---
+        - id: health
+          uri: http://agent-service:8000
+          predicates:
+            - Path=/health
+
+        # --- Agent Service ---
+        - id: agent-chat
+          uri: http://agent-service:8000
+          predicates:
+            - Path=/api/chat
+
+        - id: agent-approve
+          uri: http://agent-service:8000
+          predicates:
+            - Path=/api/approve
+
+        - id: agent-docs
+          uri: http://agent-service:8000
+          predicates:
+            - Path=/api/docs
+          filters:
+            - RewritePath=/api/docs, /docs
+
+        - id: agent-openapi
+          uri: http://agent-service:8000
+          predicates:
+            - Path=/api/openapi.json
+          filters:
+            - RewritePath=/api/openapi.json, /openapi.json
+
+        # --- Product Service ---
+        - id: products
+          uri: http://product-service:8081
+          predicates:
+            - Path=/api/products/**
+
+        - id: categories
+          uri: http://product-service:8081
+          predicates:
+            - Path=/api/categories/**
+
+        # --- Review Service ---
+        - id: reviews
+          uri: http://review-service:8082
+          predicates:
+            - Path=/api/reviews/**
+
+        # --- Order Service ---
+        - id: orders
+          uri: http://order-service:8083
+          predicates:
+            - Path=/api/orders/**
+
+        # --- Inventory Service ---
+        - id: inventory
+          uri: http://inventory-service:8084
+          predicates:
+            - Path=/api/inventory/**
+
+        # --- Payment Service ---
+        - id: payments
+          uri: http://payment-service:8085
+          predicates:
+            - Path=/api/payments/**
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4317
