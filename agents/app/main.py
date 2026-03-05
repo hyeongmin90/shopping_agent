@@ -1,6 +1,6 @@
 """Shopping Agent Service - FastAPI Application."""
 
-import asyncio
+from contextlib import asynccontextmanager
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +11,9 @@ from app.observability.tracing import setup_tracing
 from app.memory.redis_store import RedisStore
 from app.tools.kafka_client import KafkaManager
 from app.graph.supervisor import create_supervisor_graph
+from app.rag.qdrant_store import ensure_collections
+from app.rag.opensearch_store import ensure_indices
+from app.rag.pipeline import EmbeddingPipeline
 
 import structlog
 
@@ -39,6 +42,23 @@ async def lifespan(app: FastAPI):
     graph = create_supervisor_graph()
     app.state.graph = graph
 
+    # Initialize RAG stores (Qdrant collections + OpenSearch indices)
+    try:
+        await ensure_collections()
+        await ensure_indices()
+        logger.info("RAG stores initialized (Qdrant + OpenSearch)")
+    except Exception as e:
+        logger.error("rag_store_init_error", error=str(e))
+
+    # Start embedding pipeline (Kafka consumer for auto-indexing)
+    embedding_pipeline = EmbeddingPipeline()
+    try:
+        embedding_pipeline.initialize()
+        await embedding_pipeline.start()
+        app.state.embedding_pipeline = embedding_pipeline
+        logger.info("Embedding pipeline started")
+    except Exception as e:
+        logger.error("embedding_pipeline_init_error", error=str(e))
     logger.info(
         "Shopping Agent Service started",
         product_service=settings.PRODUCT_SERVICE_URL,
@@ -50,6 +70,11 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down Shopping Agent Service...")
+
+    # Stop embedding pipeline
+    if hasattr(app.state, "embedding_pipeline"):
+        await app.state.embedding_pipeline.stop()
+
     await redis_store.close()
     kafka_manager.close()
     logger.info("Shopping Agent Service stopped")
