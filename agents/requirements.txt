@@ -17,6 +17,15 @@ confluent-kafka==2.6.1
 # Redis
 redis==5.2.1
 
+# Vector DB (Qdrant)
+qdrant-client==1.7.3
+
+# Search (OpenSearch)
+opensearch-py==2.4.2
+
+# OpenAI Embeddings (direct client for embedding generation)
+openai==1.57.0
+
 # Observability
 opentelemetry-api==1.28.2
 opentelemetry-sdk==1.28.2

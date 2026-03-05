@@ -8,7 +8,9 @@ class Settings(BaseSettings):
 
     # OpenAI
     OPENAI_API_KEY: str = "sk-mock-key-for-testing"
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-5-mini"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_EMBEDDING_DIMENSION: int = 1536
 
     # Service URLs
     PRODUCT_SERVICE_URL: str = "http://localhost:8081"
@@ -28,6 +30,18 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "agent-service"
 
+    # Qdrant (Vector DB)
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_PRODUCT_COLLECTION: str = "products"
+    QDRANT_REVIEW_COLLECTION: str = "reviews"
+    QDRANT_POLICY_COLLECTION: str = "policies"
+
+    # OpenSearch (Keyword Search)
+    OPENSEARCH_HOST: str = "localhost"
+    OPENSEARCH_PORT: int = 9200
+    OPENSEARCH_PRODUCT_INDEX: str = "products"
+    OPENSEARCH_POLICY_INDEX: str = "policies"
     # Agent settings
     MAX_AGENT_ITERATIONS: int = 15
     APPROVAL_TIMEOUT_SECONDS: int = 300  # 5 minutes

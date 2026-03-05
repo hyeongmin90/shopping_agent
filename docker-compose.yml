@@ -207,6 +207,48 @@ services:
       - shopping-net
 
   # ============================================================
+  # Search & Vector DB
+  # ============================================================
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: shopping-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      - shopping-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: shopping-opensearch
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ports:
+      - "9200:9200"   # REST API
+      - "9600:9600"   # Performance Analyzer
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - shopping-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+  # ============================================================
   # Spring Boot Microservices
   # ============================================================
 
@@ -363,6 +405,8 @@ services:
       - "8000:8000"
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-mock-key-for-testing}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       PRODUCT_SERVICE_URL: http://product-service:8081
@@ -370,14 +414,27 @@ services:
       ORDER_SERVICE_URL: http://order-service:8083
       INVENTORY_SERVICE_URL: http://inventory-service:8084
       PAYMENT_SERVICE_URL: http://payment-service:8085
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: agent-service
     depends_on:
-      - product-service
-      - review-service
-      - order-service
-      - inventory-service
-      - payment-service
+      product-service:
+        condition: service_started
+      review-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      qdrant:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
     networks:
       - shopping-net
 
@@ -391,3 +448,5 @@ volumes:
   postgres-order-data:
   postgres-inventory-data:
   postgres-payment-data:
+  qdrant-data:
+  opensearch-data:
