@@ -22,6 +22,8 @@ out/
 .project
 .classpath
 .settings/
+bin/
+.factorypath
 
 # Python
 __pycache__/
