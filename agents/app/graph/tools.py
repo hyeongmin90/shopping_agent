@@ -148,17 +148,17 @@ async def search_reviews(product_id: str, keyword: str) -> str:
 # ============================================================
 
 @tool
-async def create_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
-    """Create a new shopping cart (draft order) for a user.
+async def get_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
+    """Get current shopping cart details.
 
     Args:
         user_id: User's UUID
 
     Returns:
-        JSON with the created order (cart) details including order ID
+        JSON with cart details including items, total amount
     """
     try:
-        result = await sc.create_order(user_id)
+        result = await sc.get_cart(user_id)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -166,17 +166,16 @@ async def create_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
 
 @tool
 async def add_to_cart(
-    order_id: str,
     product_id: str,
     product_name: str,
     quantity: int,
     unit_price: int,
+    user_id: Annotated[str, InjectedState("user_id")],
     variant_id: Optional[str] = None,
 ) -> str:
     """Add a product to the shopping cart.
 
     Args:
-        order_id: The cart/draft order UUID
         product_id: Product UUID to add
         product_name: Name of the product
         quantity: Number of items
@@ -184,11 +183,11 @@ async def add_to_cart(
         variant_id: Optional variant UUID (for specific size/color)
 
     Returns:
-        JSON with updated order details
+        JSON with updated cart details
     """
     try:
-        result = await sc.add_order_item(
-            order_id, product_id, variant_id, product_name, quantity, unit_price
+        result = await sc.add_cart_item(
+            user_id, product_id, variant_id, product_name, quantity, unit_price
         )
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -196,37 +195,35 @@ async def add_to_cart(
 
 
 @tool
-async def remove_from_cart(order_id: str, item_id: str) -> str:
+async def remove_from_cart(item_id: str, user_id: Annotated[str, InjectedState("user_id")]) -> str:
     """Remove an item from the shopping cart.
 
     Args:
-        order_id: The cart/draft order UUID
-        item_id: The order item UUID to remove
+        item_id: The cart item UUID to remove
 
     Returns:
-        JSON with updated order details
+        JSON with updated cart details
     """
     try:
-        result = await sc.remove_order_item(order_id, item_id)
+        result = await sc.remove_cart_item(user_id, item_id)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def update_cart_item_quantity(order_id: str, item_id: str, quantity: int) -> str:
+async def update_cart_item_quantity(item_id: str, quantity: int, user_id: Annotated[str, InjectedState("user_id")]) -> str:
     """Update quantity of an item in the cart.
 
     Args:
-        order_id: The cart/draft order UUID
-        item_id: The order item UUID
+        item_id: The cart item UUID
         quantity: New quantity
 
     Returns:
-        JSON with updated order details
+        JSON with updated cart details
     """
     try:
-        result = await sc.update_order_item(order_id, item_id, quantity)
+        result = await sc.update_cart_item(user_id, item_id, quantity)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -267,18 +264,15 @@ async def get_user_orders(user_id: Annotated[str, InjectedState("user_id")]) -> 
 
 
 @tool
-async def checkout_order(order_id: str) -> str:
-    """Submit order for checkout - moves to PENDING_APPROVAL status.
-    The user must approve before the order is placed.
-
-    Args:
-        order_id: Order UUID
+async def checkout_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
+    """Submit shopping cart for checkout - creating a pending order.
+    The user must approve the newly created order before it is placed.
 
     Returns:
-        JSON with checkout details including total amount
+        JSON with the new order details (including new order ID)
     """
     try:
-        result = await sc.checkout_order(order_id)
+        result = await sc.checkout_cart(user_id)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -389,8 +383,8 @@ async def get_product_stock(product_id: str) -> str:
 PRODUCT_TOOLS = [search_products, get_product_details, get_categories]
 REVIEW_TOOLS = [get_product_reviews, get_review_summary, search_reviews]
 CART_TOOLS = [
-    create_cart, add_to_cart, remove_from_cart, update_cart_item_quantity,
-    get_order_details, checkout_order,
+    get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity,
+    checkout_cart,
 ]
 ORDER_TOOLS = [
     get_order_details, get_user_orders, approve_order, cancel_order, request_refund,

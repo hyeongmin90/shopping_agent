@@ -1,7 +1,6 @@
 package com.shopping.order.enums;
 
 public enum OrderStatus {
-    DRAFT,
     PENDING_APPROVAL,
     PLACED,
     INVENTORY_RESERVING,

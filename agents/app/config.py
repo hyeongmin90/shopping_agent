@@ -1,13 +1,14 @@
 """Application configuration."""
 
 from pydantic_settings import BaseSettings
-
+import os
 
 class Settings(BaseSettings):
     """Application settings from environment variables."""
 
     # OpenAI
-    OPENAI_API_KEY: str = "sk-mock-key-for-testing"
+
+    OPENAI_API_KEY: str = "sk-mork-your-api-key" or os.getenv("OPENAI_API_KEY")
     OPENAI_MODEL: str = "gpt-5-mini"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSION: int = 1536
@@ -30,18 +31,12 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "agent-service"
 
-    # Qdrant (Vector DB)
-    QDRANT_HOST: str = "localhost"
-    QDRANT_PORT: int = 6333
-    QDRANT_PRODUCT_COLLECTION: str = "products"
-    QDRANT_REVIEW_COLLECTION: str = "reviews"
-    QDRANT_POLICY_COLLECTION: str = "policies"
+    # Vector DB (PostgreSQL pgvector)
+    POSTGRES_AGENT_URL: str = "postgresql+asyncpg://agent_user:agent_pass@localhost:5437/agent_db"
+    POSTGRES_PRODUCT_TABLE: str = "products"
+    POSTGRES_REVIEW_TABLE: str = "reviews"
+    POSTGRES_POLICY_TABLE: str = "policies"
 
-    # OpenSearch (Keyword Search)
-    OPENSEARCH_HOST: str = "localhost"
-    OPENSEARCH_PORT: int = 9200
-    OPENSEARCH_PRODUCT_INDEX: str = "products"
-    OPENSEARCH_POLICY_INDEX: str = "policies"
     # Agent settings
     MAX_AGENT_ITERATIONS: int = 15
     APPROVAL_TIMEOUT_SECONDS: int = 300  # 5 minutes

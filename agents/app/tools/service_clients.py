@@ -164,13 +164,12 @@ async def search_reviews(product_id: str, keyword: str) -> dict:
 # Order Service Tools
 # ============================================================
 
-async def create_order(user_id: str) -> dict:
-    """Create a draft order (cart)."""
+async def get_cart(user_id: str) -> dict:
+    """Get user cart."""
     return await _request(
-        "POST",
-        f"{settings.ORDER_SERVICE_URL}/api/orders",
+        "GET",
+        f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}",
         "order-service",
-        json_data={"userId": user_id},
     )
 
 
@@ -192,18 +191,18 @@ async def get_user_orders(user_id: str) -> list:
     )
 
 
-async def add_order_item(
-    order_id: str,
+async def add_cart_item(
+    user_id: str,
     product_id: str,
     variant_id: Optional[str],
     product_name: str,
     quantity: int,
     unit_price: int,
 ) -> dict:
-    """Add item to draft order."""
+    """Add item to cart."""
     return await _request(
         "POST",
-        f"{settings.ORDER_SERVICE_URL}/api/orders/{order_id}/items",
+        f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}/items",
         "order-service",
         json_data={
             "productId": product_id,
@@ -215,30 +214,30 @@ async def add_order_item(
     )
 
 
-async def remove_order_item(order_id: str, item_id: str) -> dict:
-    """Remove item from draft order."""
+async def remove_cart_item(user_id: str, item_id: str) -> dict:
+    """Remove item from cart."""
     return await _request(
         "DELETE",
-        f"{settings.ORDER_SERVICE_URL}/api/orders/{order_id}/items/{item_id}",
+        f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}/items/{item_id}",
         "order-service",
     )
 
 
-async def update_order_item(order_id: str, item_id: str, quantity: int) -> dict:
-    """Update item quantity in draft order."""
+async def update_cart_item(user_id: str, item_id: str, quantity: int) -> dict:
+    """Update item quantity in cart."""
     return await _request(
         "PUT",
-        f"{settings.ORDER_SERVICE_URL}/api/orders/{order_id}/items/{item_id}",
+        f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}/items/{item_id}",
         "order-service",
         json_data={"quantity": quantity},
     )
 
 
-async def checkout_order(order_id: str) -> dict:
-    """Move order to PENDING_APPROVAL."""
+async def checkout_cart(user_id: str) -> dict:
+    """Move cart to PENDING_APPROVAL order."""
     return await _request(
         "POST",
-        f"{settings.ORDER_SERVICE_URL}/api/orders/{order_id}/checkout",
+        f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}/checkout",
         "order-service",
     )
 

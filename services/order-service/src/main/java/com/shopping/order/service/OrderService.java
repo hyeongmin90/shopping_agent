@@ -1,15 +1,9 @@
 package com.shopping.order.service;
 
 import com.shopping.order.dto.ApproveOrderRequest;
-import com.shopping.order.dto.CheckoutRequest;
-import com.shopping.order.dto.CheckoutResponse;
-import com.shopping.order.dto.CreateOrderRequest;
-import com.shopping.order.dto.OrderItemRequest;
 import com.shopping.order.dto.OrderResponse;
-import com.shopping.order.dto.OrderStatusResponse;
 import com.shopping.order.dto.RefundRequest;
 import com.shopping.order.entity.OrderEntity;
-import com.shopping.order.entity.OrderItem;
 import com.shopping.order.entity.SagaState;
 import com.shopping.order.enums.OrderSagaStatus;
 import com.shopping.order.enums.OrderStatus;
@@ -18,6 +12,7 @@ import com.shopping.order.exception.BadRequestException;
 import com.shopping.order.exception.NotFoundException;
 import com.shopping.order.repository.OrderRepository;
 import com.shopping.order.repository.SagaStateRepository;
+import com.shopping.order.dto.OrderStatusResponse;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -38,18 +33,6 @@ public class OrderService {
     private final SagaStateRepository sagaStateRepository;
     private final OutboxService outboxService;
 
-    @Transactional
-    public OrderResponse createOrder(CreateOrderRequest request) {
-        OrderEntity order = new OrderEntity();
-        order.setUserId(request.getUserId());
-        order.setCurrency(request.getCurrency() == null ? "KRW" : request.getCurrency());
-        order.setStatus(OrderStatus.DRAFT);
-        order.setSagaStatus(OrderSagaStatus.NONE);
-        order.setIdempotencyKey(request.getIdempotencyKey());
-        order = orderRepository.save(order);
-        return toResponse(order);
-    }
-
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
         OrderEntity order = findOrder(orderId);
@@ -62,78 +45,6 @@ public class OrderService {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
-    }
-
-    @Transactional
-    public OrderResponse addItem(UUID orderId, OrderItemRequest request) {
-        OrderEntity order = findOrder(orderId);
-        ensureDraft(order);
-
-        OrderItem item = new OrderItem();
-        item.setOrder(order);
-        item.setProductId(request.getProductId());
-        item.setVariantId(request.getVariantId());
-        item.setProductName(request.getProductName());
-        item.setQuantity(request.getQuantity());
-        item.setUnitPrice(request.getUnitPrice());
-        order.getItems().add(item);
-
-        recalculateTotal(order);
-        orderRepository.flush();
-        return toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse removeItem(UUID orderId, UUID itemId) {
-        OrderEntity order = findOrder(orderId);
-        ensureDraft(order);
-
-        boolean removed = order.getItems().removeIf(item -> item.getId().equals(itemId));
-        if (!removed) {
-            throw new NotFoundException("Order item not found");
-        }
-
-        recalculateTotal(order);
-        orderRepository.save(order);
-        return toResponse(order);
-    }
-
-    @Transactional
-    public OrderResponse updateItem(UUID orderId, UUID itemId, OrderItemRequest request) {
-        OrderEntity order = findOrder(orderId);
-        ensureDraft(order);
-
-        OrderItem item = order.getItems().stream()
-                .filter(existing -> existing.getId().equals(itemId))
-                .findFirst()
-                .orElseThrow(() -> new NotFoundException("Order item not found"));
-
-        item.setQuantity(request.getQuantity());
-        item.setUnitPrice(request.getUnitPrice());
-        item.setProductName(request.getProductName());
-        item.setVariantId(request.getVariantId());
-
-        recalculateTotal(order);
-        orderRepository.save(order);
-        return toResponse(order);
-    }
-
-    @Transactional
-    @CacheEvict(cacheNames = "order-status", key = "#orderId")
-    public CheckoutResponse checkout(UUID orderId, CheckoutRequest request) {
-        OrderEntity order = findOrder(orderId);
-        ensureStatus(order, OrderStatus.DRAFT, "Checkout allowed only for draft orders");
-
-        if (order.getItems().isEmpty()) {
-            throw new BadRequestException("Cannot checkout empty order");
-        }
-
-        recalculateTotal(order);
-        order.setShippingAddress(request.getShippingAddress());
-        order.setStatus(OrderStatus.PENDING_APPROVAL);
-        orderRepository.save(order);
-
-        return new CheckoutResponse(order.getId(), order.getStatus(), order.getTotalAmount(), order.getCurrency());
     }
 
     @Transactional
@@ -176,8 +87,7 @@ public class OrderService {
                 command,
                 order.getId(),
                 null,
-                "approve-" + order.getId()
-        );
+                "approve-" + order.getId());
 
         return new OrderStatusResponse(order.getId(), order.getStatus(), order.getSagaStatus().name(),
                 "Saga started: inventory reservation requested");
@@ -212,8 +122,7 @@ public class OrderService {
                 Map.of("orderId", order.getId(), "reason", order.getFailureReason()),
                 order.getId(),
                 null,
-                "cancel-" + order.getId()
-        );
+                "cancel-" + order.getId());
 
         return new OrderStatusResponse(order.getId(), order.getStatus(), order.getSagaStatus().name(),
                 "Order cancelled");
@@ -240,12 +149,10 @@ public class OrderService {
                         "orderId", order.getId(),
                         "paymentId", order.getPaymentId(),
                         "refundAmount", refundAmount,
-                        "reason", request.getReason() == null ? "Customer requested refund" : request.getReason()
-                ),
+                        "reason", request.getReason() == null ? "Customer requested refund" : request.getReason()),
                 order.getId(),
                 null,
-                "refund-" + order.getId()
-        );
+                "refund-" + order.getId());
 
         return new OrderStatusResponse(order.getId(), order.getStatus(), order.getSagaStatus().name(),
                 "Refund requested");
@@ -279,8 +186,7 @@ public class OrderService {
                 Map.of("orderId", order.getId(), "reason", reason, "failedStep", step),
                 order.getId(),
                 null,
-                "failed-" + order.getId() + "-" + step
-        );
+                "failed-" + order.getId() + "-" + step);
     }
 
     @Transactional
@@ -303,8 +209,7 @@ public class OrderService {
                 Map.of("orderId", order.getId(), "confirmedAt", LocalDateTime.now().toString()),
                 order.getId(),
                 null,
-                "confirmed-" + order.getId()
-        );
+                "confirmed-" + order.getId());
     }
 
     @Transactional
@@ -329,12 +234,10 @@ public class OrderService {
                         "userId", order.getUserId(),
                         "amount", order.getTotalAmount(),
                         "currency", order.getCurrency(),
-                        "paymentMethod", "MOCK"
-                ),
+                        "paymentMethod", "MOCK"),
                 order.getId(),
                 null,
-                "authpay-" + order.getId()
-        );
+                "authpay-" + order.getId());
     }
 
     @Transactional
@@ -350,17 +253,16 @@ public class OrderService {
                 Map.of("orderId", order.getId(), "reservationId", order.getReservationId()),
                 order.getId(),
                 null,
-                "commit-inv-" + order.getId()
-        );
+                "commit-inv-" + order.getId());
         outboxService.enqueue(
                 "ORDER",
                 order.getId(),
                 "CapturePaymentCommand",
-                Map.of("orderId", order.getId(), "paymentId", order.getPaymentId(), "captureAmount", order.getTotalAmount()),
+                Map.of("orderId", order.getId(), "paymentId", order.getPaymentId(), "captureAmount",
+                        order.getTotalAmount()),
                 order.getId(),
                 null,
-                "capture-" + order.getId()
-        );
+                "capture-" + order.getId());
     }
 
     @Transactional
@@ -373,8 +275,7 @@ public class OrderService {
                     Map.of("orderId", order.getId(), "reservationId", order.getReservationId()),
                     order.getId(),
                     null,
-                    "cancel-inv-" + order.getId()
-            );
+                    "cancel-inv-" + order.getId());
         }
         if (order.getPaymentId() != null) {
             outboxService.enqueue(
@@ -384,8 +285,7 @@ public class OrderService {
                     Map.of("orderId", order.getId(), "paymentId", order.getPaymentId(), "reason", reason),
                     order.getId(),
                     null,
-                    "void-pay-" + order.getId()
-            );
+                    "void-pay-" + order.getId());
         }
     }
 
@@ -414,21 +314,10 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order not found: " + orderId));
     }
 
-    private void ensureDraft(OrderEntity order) {
-        ensureStatus(order, OrderStatus.DRAFT, "Order is not editable in current status");
-    }
-
     private void ensureStatus(OrderEntity order, OrderStatus required, String message) {
         if (order.getStatus() != required) {
             throw new BadRequestException(message);
         }
-    }
-
-    private void recalculateTotal(OrderEntity order) {
-        int total = order.getItems().stream()
-                .mapToInt(item -> item.getQuantity() * item.getUnitPrice())
-                .sum();
-        order.setTotalAmount(total);
     }
 
     private OrderResponse toResponse(OrderEntity order) {

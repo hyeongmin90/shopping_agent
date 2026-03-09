@@ -87,7 +87,7 @@ public class OrderEntity {
             totalAmount = 0;
         }
         if (status == null) {
-            status = OrderStatus.DRAFT;
+            status = OrderStatus.PENDING_APPROVAL;
         }
         if (sagaStatus == null) {
             sagaStatus = OrderSagaStatus.NONE;
