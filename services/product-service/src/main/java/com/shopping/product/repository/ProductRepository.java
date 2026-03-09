@@ -19,18 +19,18 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @EntityGraph(attributePaths = {"category"})
     @Query("""
         select p from Product p
-        where (:categoryId is null or p.category.id = :categoryId)
+        where (:filterCategory = false or p.category.id in :categoryIds)
           and (:brand is null or lower(cast(:brand as string)) = lower(p.brand))
           and (:minPrice is null or p.basePrice >= :minPrice)
           and (:maxPrice is null or p.basePrice <= :maxPrice)
           and (
             :keyword is null or cast(:keyword as string) = ''
             or lower(p.name) like lower(concat('%', cast(:keyword as string), '%'))
-            or lower(coalesce(p.description, '')) like lower(concat('%', cast(:keyword as string), '%'))
           )
         """)
     Page<Product> searchProducts(
-        @Param("categoryId") UUID categoryId,
+        @Param("filterCategory") boolean filterCategory,
+        @Param("categoryIds") java.util.Collection<UUID> categoryIds,
         @Param("brand") String brand,
         @Param("minPrice") Integer minPrice,
         @Param("maxPrice") Integer maxPrice,
@@ -38,33 +38,5 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
         Pageable pageable
     );
 
-    @Query(
-        value = """
-            select p.* from products p
-            where (:categoryId is null or p.category_id = cast(:categoryId as uuid))
-              and (:brand is null or lower(p.brand) = lower(:brand))
-              and (:minPrice is null or p.base_price >= :minPrice)
-              and (:maxPrice is null or p.base_price <= :maxPrice)
-              and to_tsvector('simple', p.name || ' ' || coalesce(p.description, ''))
-                  @@ plainto_tsquery('simple', :keyword)
-            """,
-        countQuery = """
-            select count(*) from products p
-            where (:categoryId is null or p.category_id = cast(:categoryId as uuid))
-              and (:brand is null or lower(p.brand) = lower(:brand))
-              and (:minPrice is null or p.base_price >= :minPrice)
-              and (:maxPrice is null or p.base_price <= :maxPrice)
-              and to_tsvector('simple', p.name || ' ' || coalesce(p.description, ''))
-                  @@ plainto_tsquery('simple', :keyword)
-            """,
-        nativeQuery = true
-    )
-    Page<Product> fullTextSearch(
-        @Param("keyword") String keyword,
-        @Param("categoryId") String categoryId,
-        @Param("brand") String brand,
-        @Param("minPrice") Integer minPrice,
-        @Param("maxPrice") Integer maxPrice,
-        Pageable pageable
-    );
+
 }

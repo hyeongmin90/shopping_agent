@@ -146,7 +146,7 @@ management:
       probability: 1.0
   otlp:
     tracing:
-      endpoint: http://localhost:4317
+      endpoint: http://localhost:4318/v1/traces
 
 logging:
   level:
@@ -238,4 +238,4 @@ spring:
 management:
   otlp:
     tracing:
-      endpoint: http://otel-collector:4317
+      endpoint: http://otel-collector:4318/v1/traces

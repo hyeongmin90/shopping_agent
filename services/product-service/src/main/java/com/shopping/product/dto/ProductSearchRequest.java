@@ -5,7 +5,7 @@ import lombok.Builder;
 
 @Builder
 public record ProductSearchRequest(
-    UUID categoryId,
+    String category,
     String brand,
     Integer minPrice,
     Integer maxPrice,
@@ -15,7 +15,7 @@ public record ProductSearchRequest(
     public String cacheKey() {
         return String.join(
             "|",
-            categoryId == null ? "" : categoryId.toString(),
+            normalize(category),
             normalize(brand),
             minPrice == null ? "" : minPrice.toString(),
             maxPrice == null ? "" : maxPrice.toString(),

@@ -32,7 +32,7 @@ public class ProductController {
 
     @GetMapping("/products")
     public Page<ProductResponse> getProducts(
-        @RequestParam(required = false) UUID category,
+        @RequestParam(required = false) String category,
         @RequestParam(required = false) String brand,
         @RequestParam(required = false) @Min(0) Integer minPrice,
         @RequestParam(required = false) @Min(0) Integer maxPrice,
@@ -42,7 +42,7 @@ public class ProductController {
         @RequestParam(defaultValue = "createdAt,desc") String[] sort
     ) {
         ProductSearchRequest request = ProductSearchRequest.builder()
-            .categoryId(category)
+            .category(category)
             .brand(brand)
             .minPrice(minPrice)
             .maxPrice(maxPrice)

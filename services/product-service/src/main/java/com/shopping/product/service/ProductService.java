@@ -19,7 +19,9 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,18 +39,68 @@ public class ProductService {
         String keyword = normalize(request.keyword());
         String brand = normalize(request.brand());
 
-        Page<Product> products = keyword.isBlank()
-            ? productRepository.searchProducts(request.categoryId(), brandOrNull(brand), request.minPrice(), request.maxPrice(), null, pageable)
-            : productRepository.fullTextSearch(
-                keyword,
-                request.categoryId() == null ? null : request.categoryId().toString(),
-                brandOrNull(brand),
-                request.minPrice(),
-                request.maxPrice(),
-                pageable
-            );
+        List<UUID> categoryIds = null;
+        if (request.category() != null && !request.category().isBlank()) {
+            UUID rootCategoryId;
+            try {
+                rootCategoryId = UUID.fromString(request.category().trim());
+            } catch (IllegalArgumentException e) {
+                rootCategoryId = categoryRepository.findByName(request.category().trim())
+                    .map(Category::getId)
+                    .orElse(null);
+            }
+            if (rootCategoryId == null) {
+                return Page.empty(pageable);
+            }
+            categoryIds = gatherCategoryIds(rootCategoryId);
+        }
+
+        boolean filterCategory = categoryIds != null && !categoryIds.isEmpty();
+        List<UUID> safeCategoryIds = filterCategory ? categoryIds : List.of();
+
+        Page<Product> products = productRepository.searchProducts(
+            filterCategory,
+            safeCategoryIds,
+            brandOrNull(brand),
+            request.minPrice(),
+            request.maxPrice(),
+            keyword,
+            pageable
+        );
 
         return products.map(product -> toProductResponse(product, null));
+    }
+
+    private List<UUID> gatherCategoryIds(UUID rootCategoryId) {
+        List<UUID> ids = new ArrayList<>();
+        ids.add(rootCategoryId);
+        
+        // Find the root node in the tree
+        CategoryResponse rootNode = findCategoryInTree(getCategoryTree(), rootCategoryId);
+        if (rootNode != null) {
+            collectAllChildIds(rootNode, ids);
+        }
+        return ids;
+    }
+
+    private CategoryResponse findCategoryInTree(List<CategoryResponse> tree, UUID targetId) {
+        if (tree == null) return null;
+        for (CategoryResponse node : tree) {
+            if (node.id().equals(targetId)) {
+                return node;
+            }
+            CategoryResponse found = findCategoryInTree(node.children(), targetId);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private void collectAllChildIds(CategoryResponse node, List<UUID> ids) {
+        if (node.children() == null) return;
+        for (CategoryResponse child : node.children()) {
+            ids.add(child.id());
+            collectAllChildIds(child, ids);
+        }
     }
 
     @Cacheable(value = "productDetails", key = "#productId")
@@ -145,4 +197,6 @@ public class ProductService {
     private String brandOrNull(String brand) {
         return brand.isBlank() ? null : brand;
     }
+
+
 }
