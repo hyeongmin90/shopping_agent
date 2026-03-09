@@ -393,43 +393,6 @@ INVENTORY_TOOLS = [check_inventory, get_product_stock]
 # RAG Tools (Hybrid Search)
 # ============================================================
 
-@tool
-async def rag_search_products(
-    query: str,
-    category: Optional[str] = None,
-    brand: Optional[str] = None,
-    min_price: Optional[int] = None,
-    max_price: Optional[int] = None,
-) -> str:
-    """Search products using hybrid retrieval (keyword + semantic vector search).
-
-    This tool combines OpenSearch keyword matching with Qdrant vector similarity
-    for comprehensive product discovery. Keyword results are prioritized.
-    Use this for natural language queries like '여름에 입기 좋은 시원한 옷' or
-    '노이즈 캔슬링 이어폰 추천'.
-
-    Args:
-        query: Natural language search query
-        category: Optional category name to filter (e.g., '남성의류', '전자기기')
-        brand: Optional brand name to filter
-        min_price: Optional minimum price in KRW
-        max_price: Optional maximum price in KRW
-
-    Returns:
-        JSON string of matching products with relevance scores
-    """
-    try:
-        results = await sc.rag_search_products_api(
-            query=query,
-            category=category,
-            brand=brand,
-            min_price=min_price,
-            max_price=max_price,
-        )
-        return json.dumps(results, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
 
 @tool
 async def rag_search_reviews(
@@ -494,11 +457,10 @@ async def rag_search_policies(
 
 
 # RAG Tool Groups
-RAG_PRODUCT_TOOLS = [rag_search_products]
 RAG_REVIEW_TOOLS = [rag_search_reviews]
 RAG_POLICY_TOOLS = [rag_search_policies]
 
 ALL_TOOLS = (
     PRODUCT_TOOLS + REVIEW_TOOLS + CART_TOOLS + ORDER_TOOLS + INVENTORY_TOOLS
-    + RAG_PRODUCT_TOOLS + RAG_REVIEW_TOOLS + RAG_POLICY_TOOLS
+    + RAG_REVIEW_TOOLS + RAG_POLICY_TOOLS
 )

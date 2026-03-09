@@ -302,34 +302,9 @@ async def get_product_inventory(product_id: str) -> list:
 # RAG Service Tools
 # ============================================================
 
-async def rag_search_products_api(
-    query: str,
-    category: Optional[str] = None,
-    brand: Optional[str] = None,
-    min_price: Optional[int] = None,
-    max_price: Optional[int] = None,
-    limit: int = 10,
-) -> list:
-    """Search products using RAG service."""
-    params = {"query": query, "limit": limit}
-    if category:
-        params["category"] = category
-    if brand:
-        params["brand"] = brand
-    if min_price is not None:
-        params["min_price"] = min_price
-    if max_price is not None:
-        params["max_price"] = max_price
-
-    return await _request(
-        "GET",
-        f"{settings.RAG_SERVICE_URL}/api/rag/products",
-        "rag-service",
-        params=params,
-    )
-
 
 async def rag_search_reviews_api(
+
     query: str,
     product_id: Optional[str] = None,
     min_rating: Optional[int] = None,
