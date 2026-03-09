@@ -6,6 +6,8 @@ import com.shopping.review.dto.CreateReviewRequest;
 import com.shopping.review.dto.ReviewResponse;
 import com.shopping.review.dto.ReviewSearchRequest;
 import com.shopping.review.dto.ReviewSummaryResponse;
+import com.shopping.review.kafka.ReviewCreatedEvent;
+import com.shopping.review.kafka.ReviewEventPublisher;
 import com.shopping.review.repository.RatingCountView;
 import com.shopping.review.repository.ReviewRepository;
 import com.shopping.review.repository.SizeFeedbackCountView;
@@ -36,6 +38,7 @@ public class ReviewService {
             "rating", "rating"
     );
     private final ReviewRepository reviewRepository;
+    private final ReviewEventPublisher reviewEventPublisher;
 
     @Transactional(readOnly = true)
     public Page<ReviewResponse> getReviewsByProduct(
@@ -124,6 +127,21 @@ public class ReviewService {
                 .build();
 
         Review saved = reviewRepository.save(review);
+
+        // Publish event for RAG indexing
+        reviewEventPublisher.publishReviewCreated(ReviewCreatedEvent.builder()
+                .reviewId(saved.getId())
+                .productId(saved.getProductId())
+                .userId(saved.getUserId())
+                .rating(saved.getRating())
+                .title(saved.getTitle())
+                .content(saved.getContent())
+                .sizeFeedback(saved.getSizeFeedback())
+                .qualityRating(saved.getQualityRating())
+                .verifiedPurchase(saved.getVerifiedPurchase())
+                .helpfulCount(saved.getHelpfulCount())
+                .build());
+
         return toResponse(saved);
     }
 

@@ -12,10 +12,8 @@ import com.shopping.review.domain.Review;
 import com.shopping.review.domain.SizeFeedback;
 import com.shopping.review.dto.CreateReviewRequest;
 import com.shopping.review.dto.ReviewResponse;
-import com.shopping.review.dto.ReviewSummaryResponse;
-import com.shopping.review.repository.RatingCountView;
+import com.shopping.review.kafka.ReviewEventPublisher;
 import com.shopping.review.repository.ReviewRepository;
-import com.shopping.review.repository.SizeFeedbackCountView;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +31,9 @@ class ReviewServiceTest {
 
     @Mock
     private ReviewRepository reviewRepository;
+
+    @Mock
+    private ReviewEventPublisher reviewEventPublisher;
 
     @InjectMocks
     private ReviewService reviewService;
@@ -75,6 +76,7 @@ class ReviewServiceTest {
         assertThat(response.getProductId()).isEqualTo(productId);
         assertThat(response.getRating()).isEqualTo(5);
         verify(reviewRepository).save(any(Review.class));
+        verify(reviewEventPublisher).publishReviewCreated(any());
     }
 
     @Test
