@@ -1,9 +1,10 @@
 """LangGraph tool definitions wrapping backend service calls and RAG searches."""
 
 import json
-from typing import Optional
+from typing import Optional, Annotated
 
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 
 from app.tools import service_clients as sc
 from app.rag.product_rag import search_products_rag
@@ -147,7 +148,7 @@ async def search_reviews(product_id: str, keyword: str) -> str:
 # ============================================================
 
 @tool
-async def create_cart(user_id: str) -> str:
+async def create_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
     """Create a new shopping cart (draft order) for a user.
 
     Args:
@@ -249,7 +250,7 @@ async def get_order_details(order_id: str) -> str:
 
 
 @tool
-async def get_user_orders(user_id: str) -> str:
+async def get_user_orders(user_id: Annotated[str, InjectedState("user_id")]) -> str:
     """Get all orders for a user (including past orders).
 
     Args:

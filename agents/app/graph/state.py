@@ -20,6 +20,10 @@ class AgentState(TypedDict):
     # Routing
     next_agent: Optional[str]
     current_agent: Optional[str]
+    supervisor_instruction: Optional[str]
+
+    # Final response
+    final_answer: Optional[str]
 
     # Conversation context (persisted in Redis)
     context: dict
