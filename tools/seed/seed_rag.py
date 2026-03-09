@@ -1,9 +1,9 @@
-"""Seed script for loading mock data into Qdrant and OpenSearch.
+"""Seed script for loading mock data into PostgreSQL (pgvector).
 
 This script:
-1. Creates Qdrant collections and OpenSearch indices
+1. Creates PostgreSQL pgvector tables (with fts columns)
 2. Generates embeddings for products, reviews, and policies
-3. Loads mock data into both stores
+3. Loads mock data into PostgreSQL
 
 Run with: python -m tools.seed.seed_rag
 (from the agents/ directory, after the containers are up)
@@ -18,11 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "agents"))
 
 from app.config import settings  # noqa: E402
 from app.rag.embeddings import generate_embeddings  # noqa: E402
-from app.rag.opensearch_store import (  # noqa: E402
-    bulk_index_documents,
-    ensure_indices,
-)
-from app.rag.qdrant_store import ensure_collections, upsert_vectors  # noqa: E402
+from app.rag.pgvector_store import ensure_tables, upsert_vectors  # noqa: E402
 
 # ============================================================
 # Product mock data (from product-init.sql)
@@ -485,7 +481,7 @@ from tools.seed.qdrant.mock_policies import POLICY_DOCUMENTS  # noqa: E402
 
 
 async def seed_products() -> None:
-    """Seed product data into Qdrant and OpenSearch."""
+    """Seed product data into PostgreSQL (vector + fts)."""
     print("📦 Seeding products...")
 
     # Prepare texts for embedding: name + description + brand
@@ -494,7 +490,7 @@ async def seed_products() -> None:
     ]
     embeddings = await generate_embeddings(texts)
 
-    # Qdrant: upsert product vectors
+    # PostgreSQL: upsert product vectors
     ids = [p["product_id"] for p in PRODUCTS]
     payloads = [
         {
@@ -509,30 +505,18 @@ async def seed_products() -> None:
         }
         for p in PRODUCTS
     ]
-    await upsert_vectors(settings.QDRANT_PRODUCT_COLLECTION, ids, embeddings, payloads)
-    print(f"  ✅ Qdrant: {len(PRODUCTS)} product vectors upserted")
-
-    # OpenSearch: index product documents
-    os_docs = [
-        {
-            "_id": p["product_id"],
-            "product_id": p["product_id"],
-            "name": p["name"],
-            "description": p["description"],
-            "brand": p["brand"],
-            "category": p["category"],
-            "category_name": p["category_name"],
-            "base_price": p["base_price"],
-            "tags": p["tags"],
-        }
-        for p in PRODUCTS
-    ]
-    await bulk_index_documents(settings.OPENSEARCH_PRODUCT_INDEX, os_docs)
-    print(f"  ✅ OpenSearch: {len(PRODUCTS)} product documents indexed")
+    await upsert_vectors(
+        table_name=settings.POSTGRES_PRODUCT_TABLE,
+        ids=ids,
+        vectors=embeddings,
+        payloads=payloads,
+        search_texts=texts,
+    )
+    print(f"  ✅ PostgreSQL: {len(PRODUCTS)} product vectors & fts indexed")
 
 
 async def seed_reviews() -> None:
-    """Seed review data into Qdrant."""
+    """Seed review data into PostgreSQL."""
     print("📝 Seeding reviews...")
 
     # Prepare texts for embedding: title + content
@@ -541,7 +525,7 @@ async def seed_reviews() -> None:
     ]
     embeddings = await generate_embeddings(texts)
 
-    # Qdrant: upsert review vectors
+    # PostgreSQL: upsert review vectors
     ids = [r["review_id"] for r in REVIEWS]
     payloads = [
         {
@@ -558,12 +542,18 @@ async def seed_reviews() -> None:
         }
         for r in REVIEWS
     ]
-    await upsert_vectors(settings.QDRANT_REVIEW_COLLECTION, ids, embeddings, payloads)
-    print(f"  ✅ Qdrant: {len(REVIEWS)} review vectors upserted")
+    await upsert_vectors(
+        table_name=settings.POSTGRES_REVIEW_TABLE,
+        ids=ids,
+        vectors=embeddings,
+        payloads=payloads,
+        search_texts=texts,
+    )
+    print(f"  ✅ PostgreSQL: {len(REVIEWS)} review vectors & fts indexed")
 
 
 async def seed_policies() -> None:
-    """Seed policy data into Qdrant and OpenSearch."""
+    """Seed policy data into PostgreSQL (vector + fts)."""
     print("📋 Seeding policies...")
 
     # Prepare texts for embedding: title + content
@@ -572,7 +562,7 @@ async def seed_policies() -> None:
     ]
     embeddings = await generate_embeddings(texts)
 
-    # Qdrant: upsert policy vectors
+    # PostgreSQL: upsert policy vectors
     ids = [p["policy_id"] for p in POLICY_DOCUMENTS]
     payloads = [
         {
@@ -583,37 +573,27 @@ async def seed_policies() -> None:
         }
         for p in POLICY_DOCUMENTS
     ]
-    await upsert_vectors(settings.QDRANT_POLICY_COLLECTION, ids, embeddings, payloads)
-    print(f"  ✅ Qdrant: {len(POLICY_DOCUMENTS)} policy vectors upserted")
-
-    # OpenSearch: index policy documents
-    os_docs = [
-        {
-            "_id": p["policy_id"],
-            "policy_id": p["policy_id"],
-            "title": p["title"],
-            "content": p["content"],
-            "category": p["category"],
-            "effective_date": p["effective_date"],
-        }
-        for p in POLICY_DOCUMENTS
-    ]
-    await bulk_index_documents(settings.OPENSEARCH_POLICY_INDEX, os_docs)
-    print(f"  ✅ OpenSearch: {len(POLICY_DOCUMENTS)} policy documents indexed")
+    await upsert_vectors(
+        table_name=settings.POSTGRES_POLICY_TABLE,
+        ids=ids,
+        vectors=embeddings,
+        payloads=payloads,
+        search_texts=texts,
+    )
+    print(f"  ✅ PostgreSQL: {len(POLICY_DOCUMENTS)} policy vectors & fts indexed")
 
 
 async def main() -> None:
     """Run all seed operations."""
     print("🚀 Starting RAG seed process...")
-    print(f"  Qdrant: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
-    print(f"  OpenSearch: {settings.OPENSEARCH_HOST}:{settings.OPENSEARCH_PORT}")
+    host_part = settings.POSTGRES_AGENT_URL.split("@")[1] if "@" in settings.POSTGRES_AGENT_URL else "localhost"
+    print(f"  PostgreSQL: {host_part}")
     print(f"  Embedding model: {settings.OPENAI_EMBEDDING_MODEL}")
     print()
 
-    # 1. Create collections/indices
-    print("🏗️  Creating collections and indices...")
-    await ensure_collections()
-    await ensure_indices()
+    # 1. Create tables
+    print("🏗️  Creating tables and indices...")
+    await ensure_tables()
     print()
 
     # 2. Seed data

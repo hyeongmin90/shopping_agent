@@ -10,8 +10,7 @@ import structlog
 
 from app.config import settings
 from app.rag.embeddings import generate_embedding
-from app.rag.opensearch_store import keyword_search
-from app.rag.qdrant_store import search_vectors
+from app.rag.pgvector_store import keyword_search, search_vectors
 
 logger = structlog.get_logger()
 
@@ -50,21 +49,20 @@ async def search_products_rag(
     keyword_results = []
     try:
         raw_hits = await keyword_search(
-            index_name=settings.OPENSEARCH_PRODUCT_INDEX,
+            table_name=settings.POSTGRES_PRODUCT_TABLE,
             query=query,
-            fields=["name^3", "description^2", "brand", "category_name", "tags"],
-            size=keyword_limit,
-            filters=os_filters if os_filters else None,
+            limit=keyword_limit,
+            filter_conditions=os_filters if os_filters else None,
         )
         keyword_results = [
             {
-                "product_id": hit["_source"].get("product_id", hit["_id"]),
-                "name": hit["_source"].get("name", ""),
-                "description": hit["_source"].get("description", ""),
-                "brand": hit["_source"].get("brand", ""),
-                "category": hit["_source"].get("category_name", ""),
-                "base_price": hit["_source"].get("base_price", 0),
-                "score": hit["_score"],
+                "product_id": hit["payload"].get("product_id", ""),
+                "name": hit["payload"].get("name", ""),
+                "description": hit["payload"].get("description", ""),
+                "brand": hit["payload"].get("brand", ""),
+                "category": hit["payload"].get("category_name", ""),
+                "base_price": hit["payload"].get("base_price", 0),
+                "score": hit["score"],
                 "source": "keyword",
             }
             for hit in raw_hits
@@ -82,18 +80,18 @@ async def search_products_rag(
     try:
         query_vector = await generate_embedding(query)
 
-        qdrant_filter = {}
+        vector_filter = {}
         if category:
-            qdrant_filter["category"] = category
+            vector_filter["category"] = category
         if brand:
-            qdrant_filter["brand"] = brand
+            vector_filter["brand"] = brand
 
         raw_vectors = await search_vectors(
-            collection_name=settings.QDRANT_PRODUCT_COLLECTION,
+            table_name=settings.POSTGRES_PRODUCT_TABLE,
             query_vector=query_vector,
             limit=vector_limit,
             score_threshold=0.5,
-            filter_conditions=qdrant_filter if qdrant_filter else None,
+            filter_conditions=vector_filter if vector_filter else None,
         )
         vector_results = [
             {

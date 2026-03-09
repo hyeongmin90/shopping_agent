@@ -12,8 +12,7 @@ import structlog
 
 from app.config import settings
 from app.rag.embeddings import generate_embedding
-from app.rag.opensearch_store import keyword_search
-from app.rag.qdrant_store import search_vectors
+from app.rag.pgvector_store import keyword_search, search_vectors
 
 logger = structlog.get_logger()
 
@@ -77,20 +76,19 @@ async def _keyword_search(
         os_filters["category"] = category
 
     raw_hits = await keyword_search(
-        index_name=settings.OPENSEARCH_POLICY_INDEX,
+        table_name=settings.POSTGRES_POLICY_TABLE,
         query=query,
-        fields=["title^2", "content"],
-        size=limit,
-        filters=os_filters if os_filters else None,
+        limit=limit,
+        filter_conditions=os_filters if os_filters else None,
     )
 
     return [
         {
-            "policy_id": hit["_source"].get("policy_id", hit["_id"]),
-            "title": hit["_source"].get("title", ""),
-            "content": hit["_source"].get("content", ""),
-            "category": hit["_source"].get("category", ""),
-            "score": hit["_score"],
+            "policy_id": hit["payload"].get("policy_id", ""),
+            "title": hit["payload"].get("title", ""),
+            "content": hit["payload"].get("content", ""),
+            "category": hit["payload"].get("category", ""),
+            "score": hit["score"],
             "source": "keyword",
         }
         for hit in raw_hits
@@ -105,16 +103,16 @@ async def _vector_search(
     """Semantic vector search for policy documents."""
     query_vector = await generate_embedding(query)
 
-    qdrant_filter = {}
+    vector_filter = {}
     if category:
-        qdrant_filter["category"] = category
+        vector_filter["category"] = category
 
     raw_vectors = await search_vectors(
-        collection_name=settings.QDRANT_POLICY_COLLECTION,
+        table_name=settings.POSTGRES_POLICY_TABLE,
         query_vector=query_vector,
         limit=limit,
         score_threshold=0.4,
-        filter_conditions=qdrant_filter if qdrant_filter else None,
+        filter_conditions=vector_filter if vector_filter else None,
     )
 
     return [

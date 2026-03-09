@@ -1,7 +1,6 @@
 """Shopping Agent Service - FastAPI Application."""
 
 from contextlib import asynccontextmanager
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +10,7 @@ from app.observability.tracing import setup_tracing
 from app.memory.redis_store import RedisStore
 from app.tools.kafka_client import KafkaManager
 from app.graph.supervisor import create_supervisor_graph
-from app.rag.qdrant_store import ensure_collections
-from app.rag.opensearch_store import ensure_indices
+from app.rag.pgvector_store import ensure_tables
 from app.rag.pipeline import EmbeddingPipeline
 
 import structlog
@@ -42,11 +40,10 @@ async def lifespan(app: FastAPI):
     graph = create_supervisor_graph()
     app.state.graph = graph
 
-    # Initialize RAG stores (Qdrant collections + OpenSearch indices)
+    # Initialize RAG stores (PostgreSQL pgvector tables)
     try:
-        await ensure_collections()
-        await ensure_indices()
-        logger.info("RAG stores initialized (Qdrant + OpenSearch)")
+        await ensure_tables()
+        logger.info("RAG stores initialized (PostgreSQL pgvector)")
     except Exception as e:
         logger.error("rag_store_init_error", error=str(e))
 
@@ -59,6 +56,7 @@ async def lifespan(app: FastAPI):
         logger.info("Embedding pipeline started")
     except Exception as e:
         logger.error("embedding_pipeline_init_error", error=str(e))
+    
     logger.info(
         "Shopping Agent Service started",
         product_service=settings.PRODUCT_SERVICE_URL,

@@ -2,7 +2,7 @@
 
 Listens to 'product.events' and 'review.events' topics.
 On new product/review creation, generates embeddings and stores them in
-Qdrant (vector search) and OpenSearch (keyword search).
+PostgreSQL (vector search and keyword search).
 """
 
 import asyncio
@@ -15,8 +15,7 @@ import structlog
 
 from app.config import settings
 from app.rag.embeddings import generate_embedding
-from app.rag.qdrant_store import upsert_vectors
-from app.rag.opensearch_store import index_document
+from app.rag.pgvector_store import upsert_vectors
 
 logger = structlog.get_logger()
 
@@ -135,7 +134,7 @@ class EmbeddingPipeline:
             )
 
     async def _handle_product_event(self, data: dict) -> None:
-        """Embed and store a product in Qdrant + OpenSearch."""
+        """Embed and store a product in PostgreSQL (vector + fts)."""
         product_id = data.get("productId", data.get("product_id", ""))
         name = data.get("name", "")
         description = data.get("description", "")
@@ -154,7 +153,7 @@ class EmbeddingPipeline:
         try:
             vector = await generate_embedding(embed_text)
 
-            # Upsert to Qdrant
+            # Upsert to PostgreSQL
             payload = {
                 "product_id": product_id,
                 "name": name,
@@ -165,30 +164,15 @@ class EmbeddingPipeline:
                 "tags": tags,
             }
             await upsert_vectors(
-                collection_name=settings.QDRANT_PRODUCT_COLLECTION,
+                table_name=settings.POSTGRES_PRODUCT_TABLE,
                 ids=[product_id],
                 vectors=[vector],
                 payloads=[payload],
-            )
-
-            # Index in OpenSearch
-            os_doc = {
-                "product_id": product_id,
-                "name": name,
-                "description": description,
-                "brand": brand,
-                "category_name": category_name,
-                "base_price": base_price,
-                "tags": tags,
-            }
-            await index_document(
-                index_name=settings.OPENSEARCH_PRODUCT_INDEX,
-                doc_id=product_id,
-                document=os_doc,
+                search_texts=[embed_text],
             )
 
             logger.info(
-                "embedding_pipeline_product_indexed",
+                "embedding_pipeline_product_upserted",
                 product_id=product_id,
                 name=name,
             )
@@ -201,7 +185,7 @@ class EmbeddingPipeline:
             raise
 
     async def _handle_review_event(self, data: dict) -> None:
-        """Embed and store a review in Qdrant."""
+        """Embed and store a review in PostgreSQL."""
         review_id = data.get("reviewId", data.get("review_id", ""))
         product_id = data.get("productId", data.get("product_id", ""))
         title = data.get("title", "")
@@ -223,7 +207,7 @@ class EmbeddingPipeline:
         try:
             vector = await generate_embedding(embed_text)
 
-            # Upsert to Qdrant (reviews are vector-only, no OpenSearch)
+            # Upsert to PostgreSQL (reviews are vector-only, no OpenSearch)
             payload = {
                 "review_id": review_id,
                 "product_id": product_id,
@@ -237,7 +221,7 @@ class EmbeddingPipeline:
                 "helpful_count": helpful_count,
             }
             await upsert_vectors(
-                collection_name=settings.QDRANT_REVIEW_COLLECTION,
+                table_name=settings.POSTGRES_REVIEW_TABLE,
                 ids=[review_id],
                 vectors=[vector],
                 payloads=[payload],

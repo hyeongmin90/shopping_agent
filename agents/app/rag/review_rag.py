@@ -9,7 +9,7 @@ import structlog
 
 from app.config import settings
 from app.rag.embeddings import generate_embedding
-from app.rag.qdrant_store import search_vectors
+from app.rag.pgvector_store import search_vectors
 
 logger = structlog.get_logger()
 
@@ -41,19 +41,19 @@ async def search_reviews_rag(
     try:
         query_vector = await generate_embedding(query)
 
-        # Build Qdrant filter conditions
-        qdrant_filter = {}
+        # Build pgvector filter conditions
+        vector_filter = {}
         if product_id:
-            qdrant_filter["product_id"] = product_id
+            vector_filter["product_id"] = product_id
         if verified_only:
-            qdrant_filter["verified_purchase"] = True
+            vector_filter["verified_purchase"] = True
 
         raw_vectors = await search_vectors(
-            collection_name=settings.QDRANT_REVIEW_COLLECTION,
+            table_name=settings.POSTGRES_REVIEW_TABLE,
             query_vector=query_vector,
             limit=limit,
             score_threshold=0.4,
-            filter_conditions=qdrant_filter if qdrant_filter else None,
+            filter_conditions=vector_filter if vector_filter else None,
         )
 
         for hit in raw_vectors:
