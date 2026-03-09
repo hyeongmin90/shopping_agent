@@ -10,8 +10,13 @@ import com.shopping.order.enums.OrderSagaStatus;
 import com.shopping.order.enums.OrderStatus;
 import com.shopping.order.exception.BadRequestException;
 import com.shopping.order.exception.NotFoundException;
+import com.shopping.order.repository.CartItemRepository;
 import com.shopping.order.repository.CartRepository;
 import com.shopping.order.repository.OrderRepository;
+import com.shopping.order.dto.CheckoutResponse;
+import com.shopping.order.dto.CheckoutRequest;
+import com.shopping.order.client.ProductDto;
+import com.shopping.order.client.ProductServiceClient;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,7 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class CartService {
 
     private final CartRepository cartRepository;
+    private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
+    private final ProductServiceClient productServiceClient;
 
     @Transactional
     public CartResponse getCart(UUID userId) {
@@ -38,9 +45,9 @@ public class CartService {
         item.setCart(cart);
         item.setProductId(request.getProductId());
         item.setVariantId(request.getVariantId());
-        item.setProductName(request.getProductName());
         item.setQuantity(request.getQuantity());
-        item.setUnitPrice(request.getUnitPrice());
+
+        item = cartItemRepository.save(item);
         cart.getItems().add(item);
 
         recalculateTotal(cart);
@@ -72,8 +79,6 @@ public class CartService {
                 .orElseThrow(() -> new NotFoundException("Cart item not found"));
 
         item.setQuantity(request.getQuantity());
-        item.setUnitPrice(request.getUnitPrice());
-        item.setProductName(request.getProductName());
         item.setVariantId(request.getVariantId());
 
         recalculateTotal(cart);
@@ -82,8 +87,7 @@ public class CartService {
     }
 
     @Transactional
-    public com.shopping.order.dto.CheckoutResponse checkout(UUID userId,
-            com.shopping.order.dto.CheckoutRequest request) {
+    public CheckoutResponse checkout(UUID userId, CheckoutRequest request) {
         CartEntity cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Cart not found for user: " + userId));
 
@@ -98,13 +102,23 @@ public class CartService {
         order.setSagaStatus(OrderSagaStatus.NONE);
 
         for (CartItemEntity cartItem : cart.getItems()) {
+            String productName = "Unknown Product";
+            Integer unitPrice = 0;
+            try {
+                ProductDto product = productServiceClient.getProduct(cartItem.getProductId());
+                productName = product.getName();
+                unitPrice = product.getBasePrice();
+            } catch (Exception e) {
+                // fallback if product-service is unavailable
+            }
+
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
             orderItem.setProductId(cartItem.getProductId());
             orderItem.setVariantId(cartItem.getVariantId());
-            orderItem.setProductName(cartItem.getProductName());
+            orderItem.setProductName(productName);
             orderItem.setQuantity(cartItem.getQuantity());
-            orderItem.setUnitPrice(cartItem.getUnitPrice());
+            orderItem.setUnitPrice(unitPrice);
             order.getItems().add(orderItem);
         }
 
@@ -118,7 +132,7 @@ public class CartService {
         cart.setTotalAmount(0);
         cartRepository.save(cart);
 
-        return new com.shopping.order.dto.CheckoutResponse(order.getId(), order.getStatus(), order.getTotalAmount(),
+        return new CheckoutResponse(order.getId(), order.getStatus(), order.getTotalAmount(),
                 order.getCurrency());
     }
 
@@ -132,7 +146,14 @@ public class CartService {
 
     private void recalculateTotal(CartEntity cart) {
         int total = cart.getItems().stream()
-                .mapToInt(item -> item.getQuantity() * item.getUnitPrice())
+                .mapToInt(item -> {
+                    try {
+                        ProductDto product = productServiceClient.getProduct(item.getProductId());
+                        return item.getQuantity() * product.getBasePrice();
+                    } catch (Exception e) {
+                        return 0; // fallback if product-service unavailable
+                    }
+                })
                 .sum();
         cart.setTotalAmount(total);
     }
@@ -146,14 +167,26 @@ public class CartService {
                 .createdAt(cart.getCreatedAt())
                 .updatedAt(cart.getUpdatedAt())
                 .items(cart.getItems().stream()
-                        .map(item -> CartResponse.CartItemView.builder()
-                                .id(item.getId())
-                                .productId(item.getProductId())
-                                .variantId(item.getVariantId())
-                                .productName(item.getProductName())
-                                .quantity(item.getQuantity())
-                                .unitPrice(item.getUnitPrice())
-                                .build())
+                        .map(item -> {
+                            String productName = "Unknown Product";
+                            Integer unitPrice = 0;
+                            try {
+                                ProductDto product = productServiceClient.getProduct(item.getProductId());
+                                productName = product.getName();
+                                unitPrice = product.getBasePrice();
+                            } catch (Exception e) {
+                                // fallback if product-service is unavailable
+                            }
+
+                            return CartResponse.CartItemView.builder()
+                                    .id(item.getId())
+                                    .productId(item.getProductId())
+                                    .variantId(item.getVariantId())
+                                    .productName(productName)
+                                    .quantity(item.getQuantity())
+                                    .unitPrice(unitPrice)
+                                    .build();
+                        })
                         .toList())
                 .build();
     }

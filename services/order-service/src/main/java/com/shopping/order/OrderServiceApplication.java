@@ -5,8 +5,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
 @EnableScheduling
 @EnableCaching
+@EnableFeignClients
 @SpringBootApplication
 public class OrderServiceApplication {
 

@@ -10,7 +10,7 @@ spring:
     password: order_pass
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
@@ -45,6 +45,10 @@ management:
       endpoint: http://localhost:4318/v1/traces
 
 app:
+  services:
+    product-service:
+      url: http://localhost:8081
+
   kafka:
     topics:
       order-events: order.events

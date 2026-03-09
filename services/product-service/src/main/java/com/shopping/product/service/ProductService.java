@@ -19,9 +19,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,8 +44,8 @@ public class ProductService {
                 rootCategoryId = UUID.fromString(request.category().trim());
             } catch (IllegalArgumentException e) {
                 rootCategoryId = categoryRepository.findByName(request.category().trim())
-                    .map(Category::getId)
-                    .orElse(null);
+                        .map(Category::getId)
+                        .orElse(null);
             }
             if (rootCategoryId == null) {
                 return Page.empty(pageable);
@@ -59,14 +57,13 @@ public class ProductService {
         List<UUID> safeCategoryIds = filterCategory ? categoryIds : List.of();
 
         Page<Product> products = productRepository.searchProducts(
-            filterCategory,
-            safeCategoryIds,
-            brandOrNull(brand),
-            request.minPrice(),
-            request.maxPrice(),
-            keyword,
-            pageable
-        );
+                filterCategory,
+                safeCategoryIds,
+                brandOrNull(brand),
+                request.minPrice(),
+                request.maxPrice(),
+                keyword,
+                pageable);
 
         return products.map(product -> toProductResponse(product, null));
     }
@@ -74,7 +71,7 @@ public class ProductService {
     private List<UUID> gatherCategoryIds(UUID rootCategoryId) {
         List<UUID> ids = new ArrayList<>();
         ids.add(rootCategoryId);
-        
+
         // Find the root node in the tree
         CategoryResponse rootNode = findCategoryInTree(getCategoryTree(), rootCategoryId);
         if (rootNode != null) {
@@ -84,19 +81,22 @@ public class ProductService {
     }
 
     private CategoryResponse findCategoryInTree(List<CategoryResponse> tree, UUID targetId) {
-        if (tree == null) return null;
+        if (tree == null)
+            return null;
         for (CategoryResponse node : tree) {
             if (node.id().equals(targetId)) {
                 return node;
             }
             CategoryResponse found = findCategoryInTree(node.children(), targetId);
-            if (found != null) return found;
+            if (found != null)
+                return found;
         }
         return null;
     }
 
     private void collectAllChildIds(CategoryResponse node, List<UUID> ids) {
-        if (node.children() == null) return;
+        if (node.children() == null)
+            return;
         for (CategoryResponse child : node.children()) {
             ids.add(child.id());
             collectAllChildIds(child, ids);
@@ -106,7 +106,7 @@ public class ProductService {
     @Cacheable(value = "productDetails", key = "#productId")
     public ProductResponse getProduct(UUID productId) {
         Product product = productRepository.findDetailedById(productId)
-            .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
         return toProductResponse(product, product.getVariants());
     }
 
@@ -115,9 +115,9 @@ public class ProductService {
             throw new ResourceNotFoundException("Product not found: " + productId);
         }
         return productVariantRepository.findByProductIdOrderByNameAsc(productId)
-            .stream()
-            .map(this::toVariantResponse)
-            .toList();
+                .stream()
+                .map(this::toVariantResponse)
+                .toList();
     }
 
     @Cacheable(value = "categoryTree", key = "'root'")
@@ -128,12 +128,12 @@ public class ProductService {
 
         for (Category category : categories) {
             map.put(category.getId(), CategoryResponse.builder()
-                .id(category.getId())
-                .name(category.getName())
-                .parentId(category.getParent() == null ? null : category.getParent().getId())
-                .description(category.getDescription())
-                .children(new ArrayList<>())
-                .build());
+                    .id(category.getId())
+                    .name(category.getName())
+                    .parentId(category.getParent() == null ? null : category.getParent().getId())
+                    .description(category.getDescription())
+                    .children(new ArrayList<>())
+                    .build());
         }
 
         for (Category category : categories) {
@@ -155,39 +155,39 @@ public class ProductService {
 
     private ProductResponse toProductResponse(Product product, List<ProductVariant> variants) {
         List<ProductVariantResponse> variantResponses = variants == null
-            ? List.of()
-            : variants.stream().map(this::toVariantResponse).toList();
+                ? List.of()
+                : variants.stream().map(this::toVariantResponse).toList();
 
         return ProductResponse.builder()
-            .id(product.getId())
-            .name(product.getName())
-            .description(product.getDescription())
-            .brand(product.getBrand())
-            .categoryId(product.getCategory() == null ? null : product.getCategory().getId())
-            .categoryName(product.getCategory() == null ? null : product.getCategory().getName())
-            .basePrice(product.getBasePrice())
-            .currency(product.getCurrency())
-            .imageUrl(product.getImageUrl())
-            .status(product.getStatus())
-            .shippingDays(product.getShippingDays())
-            .compatibilityTags(product.getCompatibilityTags())
-            .createdAt(product.getCreatedAt())
-            .updatedAt(product.getUpdatedAt())
-            .variants(variantResponses)
-            .build();
+                .id(product.getId())
+                .name(product.getName())
+                .description(product.getDescription())
+                .brand(product.getBrand())
+                .categoryId(product.getCategory() == null ? null : product.getCategory().getId())
+                .categoryName(product.getCategory() == null ? null : product.getCategory().getName())
+                .basePrice(product.getBasePrice())
+                .currency(product.getCurrency())
+                .imageUrl(product.getImageUrl())
+                .status(product.getStatus())
+                .shippingDays(product.getShippingDays())
+                .compatibilityTags(product.getCompatibilityTags())
+                .createdAt(product.getCreatedAt())
+                .updatedAt(product.getUpdatedAt())
+                .variants(variantResponses)
+                .build();
     }
 
     private ProductVariantResponse toVariantResponse(ProductVariant variant) {
         return ProductVariantResponse.builder()
-            .id(variant.getId())
-            .sku(variant.getSku())
-            .name(variant.getName())
-            .size(variant.getSize())
-            .color(variant.getColor())
-            .priceAdjustment(variant.getPriceAdjustment())
-            .status(variant.getStatus())
-            .attributes(variant.getAttributes())
-            .build();
+                .id(variant.getId())
+                .sku(variant.getSku())
+                .name(variant.getName())
+                .size(variant.getSize())
+                .color(variant.getColor())
+                .priceAdjustment(variant.getPriceAdjustment())
+                .status(variant.getStatus())
+                .attributes(variant.getAttributes())
+                .build();
     }
 
     private String normalize(String value) {
@@ -197,6 +197,5 @@ public class ProductService {
     private String brandOrNull(String brand) {
         return brand.isBlank() ? null : brand;
     }
-
 
 }

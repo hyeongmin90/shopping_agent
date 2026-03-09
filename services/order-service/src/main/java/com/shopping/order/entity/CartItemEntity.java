@@ -27,14 +27,8 @@ public class CartItemEntity {
     @Column(name = "variant_id")
     private UUID variantId;
 
-    @Column(name = "product_name")
-    private String productName;
-
     @Column(nullable = false)
     private Integer quantity;
-
-    @Column(name = "unit_price", nullable = false)
-    private Integer unitPrice;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
