@@ -1,8 +1,7 @@
-"""Automated embedding pipeline — Kafka consumer for product/review events.
+"""Automated embedding pipeline — Kafka consumer for review events.
 
-Listens to 'product.events' and 'review.events' topics.
-On new product/review creation, generates embeddings and stores them in
-PostgreSQL (vector search and keyword search).
+Listens to 'review.events' topic.
+On new review creation, generates embeddings and stores them in PostgreSQL (vector search).
 """
 
 import asyncio
@@ -19,13 +18,11 @@ from app.rag.pgvector_store import upsert_vectors
 
 logger = structlog.get_logger()
 
-PRODUCT_CREATED_EVENT = "ProductCreatedEvent"
-PRODUCT_UPDATED_EVENT = "ProductUpdatedEvent"
 REVIEW_CREATED_EVENT = "ReviewCreatedEvent"
 
 
 class EmbeddingPipeline:
-    """Kafka consumer that automatically embeds new products and reviews."""
+    """Kafka consumer that automatically embeds new reviews."""
 
     def __init__(self):
         self._consumer: Optional[Consumer] = None
@@ -42,10 +39,10 @@ class EmbeddingPipeline:
             "max.poll.interval.ms": 300000,
         }
         self._consumer = Consumer(consumer_config)
-        self._consumer.subscribe(["product.events", "review.events"])
+        self._consumer.subscribe(["review.events"])
         logger.info(
             "embedding_pipeline_initialized",
-            topics=["product.events", "review.events"],
+            topics=["review.events"],
         )
 
     async def start(self) -> None:
@@ -122,66 +119,13 @@ class EmbeddingPipeline:
             topic=topic,
         )
 
-        if event_type in (PRODUCT_CREATED_EVENT, PRODUCT_UPDATED_EVENT):
-            await self._handle_product_event(data)
-        elif event_type == REVIEW_CREATED_EVENT:
+        if event_type == REVIEW_CREATED_EVENT:
             await self._handle_review_event(data)
         else:
             logger.debug(
                 "embedding_pipeline_event_skipped",
                 event_type=event_type,
             )
-
-    async def _handle_product_event(self, data: dict) -> None:
-        """Embed and store a product in PostgreSQL (vector + fts)."""
-        product_id = data.get("productId", data.get("product_id", ""))
-        name = data.get("name", "")
-        description = data.get("description", "")
-        brand = data.get("brand", "")
-        category_name = data.get("categoryName", data.get("category_name", ""))
-        base_price = data.get("basePrice", data.get("base_price", 0))
-        tags = data.get("tags", [])
-
-        if not product_id or not name:
-            logger.warning("embedding_pipeline_product_missing_fields", data=data)
-            return
-
-        # Build embedding text: name + description + brand
-        embed_text = f"{name} {description} {brand}".strip()
-
-        try:
-            vector = await generate_embedding(embed_text)
-
-            # Upsert to PostgreSQL
-            payload = {
-                "product_id": product_id,
-                "name": name,
-                "description": description,
-                "brand": brand,
-                "category_name": category_name,
-                "base_price": base_price,
-                "tags": tags,
-            }
-            await upsert_vectors(
-                table_name=settings.POSTGRES_PRODUCT_TABLE,
-                ids=[product_id],
-                vectors=[vector],
-                payloads=[payload],
-                search_texts=[embed_text],
-            )
-
-            logger.info(
-                "embedding_pipeline_product_upserted",
-                product_id=product_id,
-                name=name,
-            )
-        except Exception as e:
-            logger.error(
-                "embedding_pipeline_product_error",
-                product_id=product_id,
-                error=str(e),
-            )
-            raise
 
     async def _handle_review_event(self, data: dict) -> None:
         """Embed and store a review in PostgreSQL."""
