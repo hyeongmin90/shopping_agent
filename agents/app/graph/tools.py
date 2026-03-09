@@ -7,9 +7,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from app.tools import service_clients as sc
-from app.rag.product_rag import search_products_rag
-from app.rag.review_rag import search_reviews_rag
-from app.rag.policy_rag import search_policies_rag
+
 
 import structlog
 
@@ -167,9 +165,7 @@ async def get_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
 @tool
 async def add_to_cart(
     product_id: str,
-    product_name: str,
     quantity: int,
-    unit_price: int,
     user_id: Annotated[str, InjectedState("user_id")],
     variant_id: Optional[str] = None,
 ) -> str:
@@ -177,9 +173,7 @@ async def add_to_cart(
 
     Args:
         product_id: Product UUID to add
-        product_name: Name of the product
         quantity: Number of items
-        unit_price: Price per unit in KRW
         variant_id: Optional variant UUID (for specific size/color)
 
     Returns:
@@ -187,7 +181,7 @@ async def add_to_cart(
     """
     try:
         result = await sc.add_cart_item(
-            user_id, product_id, variant_id, product_name, quantity, unit_price
+            user_id, product_id, variant_id, quantity
         )
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -212,18 +206,20 @@ async def remove_from_cart(item_id: str, user_id: Annotated[str, InjectedState("
 
 
 @tool
-async def update_cart_item_quantity(item_id: str, quantity: int, user_id: Annotated[str, InjectedState("user_id")]) -> str:
+async def update_cart_item_quantity(item_id: str, product_id: str, quantity: int, user_id: Annotated[str, InjectedState("user_id")], variant_id: Optional[str] = None) -> str:
     """Update quantity of an item in the cart.
 
     Args:
         item_id: The cart item UUID
+        product_id: The product UUID
         quantity: New quantity
+        variant_id: Optional variant UUID
 
     Returns:
         JSON with updated cart details
     """
     try:
-        result = await sc.update_cart_item(user_id, item_id, quantity)
+        result = await sc.update_cart_item(user_id, item_id, product_id, variant_id, quantity)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -339,14 +335,14 @@ async def request_refund(order_id: str, reason: Optional[str] = None) -> str:
 @tool
 async def check_inventory(
     product_id: str,
-    variant_id: Optional[str] = None,
+    variant_id: str,
     quantity: int = 1,
 ) -> str:
     """Check if a product variant is in stock.
 
     Args:
         product_id: Product UUID
-        variant_id: Variant UUID (optional)
+        variant_id: Variant UUID
         quantity: Desired quantity
 
     Returns:
@@ -423,7 +419,7 @@ async def rag_search_products(
         JSON string of matching products with relevance scores
     """
     try:
-        results = await search_products_rag(
+        results = await sc.rag_search_products_api(
             query=query,
             category=category,
             brand=brand,
@@ -459,7 +455,7 @@ async def rag_search_reviews(
         JSON string of semantically matching reviews with metadata
     """
     try:
-        results = await search_reviews_rag(
+        results = await sc.rag_search_reviews_api(
             query=query,
             product_id=product_id,
             min_rating=min_rating,
@@ -489,9 +485,8 @@ async def rag_search_policies(
         JSON string of matching policy documents
     """
     try:
-        results = await search_policies_rag(
+        results = await sc.rag_search_policies_api(
             query=query,
-            category=category,
         )
         return json.dumps(results, ensure_ascii=False)
     except Exception as e:

@@ -21,7 +21,7 @@ async def get_pool() -> asyncpg.Pool:
             min_size=1,
             max_size=10,
         )
-        # Register pgvector type on the pool
+
         async with _pool.acquire() as conn:
             await register_vector(conn)
             
@@ -47,7 +47,6 @@ async def ensure_tables() -> None:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
         for table_name, description in tables_config.items():
-            # Create table
             await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     id VARCHAR PRIMARY KEY,
@@ -56,21 +55,17 @@ async def ensure_tables() -> None:
                     fts tsvector
                 );
             """)
-            
-            # Create index for cosine distance mapping (qdrant COSINE)
-            # m=16, ef_construction=64 are pgvector defaults, can tune if needed
+           
             await conn.execute(f"""
                 CREATE INDEX IF NOT EXISTS {table_name}_embedding_idx 
                 ON {table_name} USING hnsw (embedding vector_cosine_ops);
             """)
             
-            # Create a GIN index on metadata for fast JSONB filtering
             await conn.execute(f"""
                 CREATE INDEX IF NOT EXISTS {table_name}_metadata_idx 
                 ON {table_name} USING gin (metadata);
             """)
 
-            # Create a GIN index on the fts column for fast keyword search
             await conn.execute(f"""
                 CREATE INDEX IF NOT EXISTS {table_name}_fts_idx 
                 ON {table_name} USING gin (fts);
@@ -146,10 +141,6 @@ async def search_vectors(
     """
     pool = await get_pool()
     
-    # pgvector uses `<=>` for cosine distance, which is 1 - cosine_similarity.
-    # qdrant score for cosine is between -1 and 1, typically 0 to 1 for text embeddings.
-    # Score = 1 - (embedding <=> query_vector)
-    
     where_clauses = []
     args = [query_vector]
     arg_idx = 2
@@ -157,8 +148,6 @@ async def search_vectors(
     if filter_conditions:
         for key, value in filter_conditions.items():
             if isinstance(value, list):
-                # match any (IN clause equivalent for JSONB array or string elements)
-                # metadata->>'key' = ANY($X)
                 where_clauses.append(f"metadata->>'{key}' = ANY(${arg_idx}::text[])")
                 args.append([str(v) for v in value])
                 arg_idx += 1
@@ -186,11 +175,6 @@ async def search_vectors(
     args.append(limit)
     
     async with pool.acquire() as conn:
-        # We need to register vector type for the connection if acquired from pool dynamically?
-        # Typically the pool's init function or registering globally works, but let's be safe.
-        # Actually asyncpg connection pooling might need per-connection registration 
-        # but handled by pool.set_setup internally. If not, we might need a setup connection.
-        # It's better to configure connection setup on the pool.
         records = await conn.fetch(query, *args)
         
     return [
@@ -260,7 +244,6 @@ async def keyword_search(
         for record in records
     ]
 
-# Setup per connection registration for vector
 async def setup_connection(conn):
     await register_vector(conn)
 
@@ -277,5 +260,6 @@ async def _init_pool_with_setup():
             "pgvector_pool_initialized",
             url=settings.POSTGRES_AGENT_URL.split("@")[1] if "@" in settings.POSTGRES_AGENT_URL else "localhost",
         )
-# Override the get_pool to use the properly setup one
+    return _pool
+
 get_pool.__code__ = _init_pool_with_setup.__code__

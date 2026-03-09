@@ -19,7 +19,6 @@ from app.rag.pgvector_store import upsert_vectors
 
 logger = structlog.get_logger()
 
-# Event types that trigger embedding pipeline
 PRODUCT_CREATED_EVENT = "ProductCreatedEvent"
 PRODUCT_UPDATED_EVENT = "ProductUpdatedEvent"
 REVIEW_CREATED_EVENT = "ReviewCreatedEvent"

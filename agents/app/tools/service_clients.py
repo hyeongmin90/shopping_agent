@@ -195,9 +195,7 @@ async def add_cart_item(
     user_id: str,
     product_id: str,
     variant_id: Optional[str],
-    product_name: str,
-    quantity: int,
-    unit_price: int,
+    quantity: int
 ) -> dict:
     """Add item to cart."""
     return await _request(
@@ -207,12 +205,9 @@ async def add_cart_item(
         json_data={
             "productId": product_id,
             "variantId": variant_id,
-            "productName": product_name,
             "quantity": quantity,
-            "unitPrice": unit_price,
         },
     )
-
 
 async def remove_cart_item(user_id: str, item_id: str) -> dict:
     """Remove item from cart."""
@@ -223,13 +218,17 @@ async def remove_cart_item(user_id: str, item_id: str) -> dict:
     )
 
 
-async def update_cart_item(user_id: str, item_id: str, quantity: int) -> dict:
+async def update_cart_item(user_id: str, item_id: str, product_id: str, variant_id: Optional[str], quantity: int) -> dict:
     """Update item quantity in cart."""
     return await _request(
         "PUT",
         f"{settings.ORDER_SERVICE_URL}/api/carts/user/{user_id}/items/{item_id}",
         "order-service",
-        json_data={"quantity": quantity},
+        json_data={
+            "productId": product_id,
+            "variantId": variant_id,
+            "quantity": quantity
+        },
     )
 
 
@@ -277,13 +276,11 @@ async def request_refund(order_id: str, reason: Optional[str] = None) -> dict:
 
 async def check_inventory(
     product_id: str,
-    variant_id: Optional[str] = None,
+    variant_id: str,
     quantity: int = 1,
 ) -> dict:
     """Check inventory availability."""
-    params = {"productId": product_id, "quantity": quantity}
-    if variant_id:
-        params["variantId"] = variant_id
+    params = {"productId": product_id, "quantity": quantity, "variantId": variant_id}
     return await _request(
         "GET",
         f"{settings.INVENTORY_SERVICE_URL}/api/inventory/check",
@@ -298,4 +295,67 @@ async def get_product_inventory(product_id: str) -> list:
         "GET",
         f"{settings.INVENTORY_SERVICE_URL}/api/inventory/product/{product_id}",
         "inventory-service",
+    )
+
+
+# ============================================================
+# RAG Service Tools
+# ============================================================
+
+async def rag_search_products_api(
+    query: str,
+    category: Optional[str] = None,
+    brand: Optional[str] = None,
+    min_price: Optional[int] = None,
+    max_price: Optional[int] = None,
+    limit: int = 10,
+) -> list:
+    """Search products using RAG service."""
+    params = {"query": query, "limit": limit}
+    if category:
+        params["category"] = category
+    if brand:
+        params["brand"] = brand
+    if min_price is not None:
+        params["min_price"] = min_price
+    if max_price is not None:
+        params["max_price"] = max_price
+
+    return await _request(
+        "GET",
+        f"{settings.RAG_SERVICE_URL}/api/rag/products",
+        "rag-service",
+        params=params,
+    )
+
+
+async def rag_search_reviews_api(
+    query: str,
+    product_id: Optional[str] = None,
+    min_rating: Optional[int] = None,
+    verified_only: bool = False,
+    limit: int = 10,
+) -> list:
+    """Search reviews using RAG service."""
+    params = {"query": query, "limit": limit, "verified_only": verified_only}
+    if product_id:
+        params["product_id"] = product_id
+    if min_rating is not None:
+        params["min_rating"] = min_rating
+
+    return await _request(
+        "GET",
+        f"{settings.RAG_SERVICE_URL}/api/rag/reviews",
+        "rag-service",
+        params=params,
+    )
+
+
+async def rag_search_policies_api(query: str, limit: int = 3) -> list:
+    """Search store policies using RAG service."""
+    return await _request(
+        "GET",
+        f"{settings.RAG_SERVICE_URL}/api/rag/policies",
+        "rag-service",
+        params={"query": query, "limit": limit},
     )

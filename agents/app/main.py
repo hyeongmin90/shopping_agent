@@ -10,8 +10,6 @@ from app.observability.tracing import setup_tracing
 from app.memory.redis_store import RedisStore
 from app.tools.kafka_client import KafkaManager
 from app.graph.supervisor import create_supervisor_graph
-from app.rag.pgvector_store import ensure_tables
-from app.rag.pipeline import EmbeddingPipeline
 
 import structlog
 
@@ -39,23 +37,6 @@ async def lifespan(app: FastAPI):
     # Create supervisor graph
     graph = create_supervisor_graph()
     app.state.graph = graph
-
-    # Initialize RAG stores (PostgreSQL pgvector tables)
-    try:
-        await ensure_tables()
-        logger.info("RAG stores initialized (PostgreSQL pgvector)")
-    except Exception as e:
-        logger.error("rag_store_init_error", error=str(e))
-
-    # Start embedding pipeline (Kafka consumer for auto-indexing)
-    embedding_pipeline = EmbeddingPipeline()
-    try:
-        embedding_pipeline.initialize()
-        await embedding_pipeline.start()
-        app.state.embedding_pipeline = embedding_pipeline
-        logger.info("Embedding pipeline started")
-    except Exception as e:
-        logger.error("embedding_pipeline_init_error", error=str(e))
     
     logger.info(
         "Shopping Agent Service started",
@@ -68,10 +49,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down Shopping Agent Service...")
-
-    # Stop embedding pipeline
-    if hasattr(app.state, "embedding_pipeline"):
-        await app.state.embedding_pipeline.stop()
 
     await redis_store.close()
     kafka_manager.close()

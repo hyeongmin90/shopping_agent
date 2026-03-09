@@ -393,7 +393,8 @@ services:
       ORDER_SERVICE_URL: http://order-service:8083
       INVENTORY_SERVICE_URL: http://inventory-service:8084
       PAYMENT_SERVICE_URL: http://payment-service:8085
-      POSTGRES_AGENT_URL: postgresql+asyncpg://agent_user:agent_pass@postgres-agent:5432/agent_db
+      RAG_SERVICE_URL: http://rag-service:8002
+      POSTGRES_AGENT_URL: postgresql://agent_user:agent_pass@postgres-agent:5432/agent_db
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: agent-service
     depends_on:
@@ -407,6 +408,31 @@ services:
         condition: service_started
       payment-service:
         condition: service_started
+      postgres-agent:
+        condition: service_healthy
+      rag-service:
+        condition: service_started
+    networks:
+      - shopping-net
+
+  rag-service:
+    build:
+      context: ./rag-service
+      dockerfile: Dockerfile
+    container_name: shopping-rag-service
+    ports:
+      - "8002:8002"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-mock-key-for-testing}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_AGENT_URL: postgresql://agent_user:agent_pass@postgres-agent:5432/agent_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: rag-service
+    depends_on:
+      kafka:
+        condition: service_healthy
       postgres-agent:
         condition: service_healthy
     networks:
