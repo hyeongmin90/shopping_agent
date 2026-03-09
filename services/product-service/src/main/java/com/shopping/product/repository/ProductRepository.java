@@ -16,18 +16,31 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     @Query("select p from Product p where p.id = :id")
     Optional<Product> findDetailedById(@Param("id") UUID id);
 
-    @EntityGraph(attributePaths = {"category"})
-    @Query("""
-        select p from Product p
-        where (:filterCategory = false or p.category.id in :categoryIds)
-          and (:brand is null or lower(cast(:brand as string)) = lower(p.brand))
-          and (:minPrice is null or p.basePrice >= :minPrice)
-          and (:maxPrice is null or p.basePrice <= :maxPrice)
-          and (
-            :keyword is null or cast(:keyword as string) = ''
-            or lower(p.name) like lower(concat('%', cast(:keyword as string), '%'))
+    @Query(value = """
+        SELECT p.* FROM product p
+        WHERE (:filterCategory = false OR p.category_id IN :categoryIds)
+          AND (:brand IS NULL OR LOWER(p.brand) = LOWER(CAST(:brand AS text)))
+          AND (:minPrice IS NULL OR p.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR p.base_price <= :maxPrice)
+          AND (
+            :keyword IS NULL OR CAST(:keyword AS text) = ''
+            OR to_tsvector('simple', p.name || ' ' || coalesce(p.description, '') || ' ' || coalesce(p.brand, '')) 
+               @@ websearch_to_tsquery('simple', CAST(:keyword AS text))
           )
-        """)
+        """, 
+        countQuery = """
+        SELECT count(*) FROM product p
+        WHERE (:filterCategory = false OR p.category_id IN :categoryIds)
+          AND (:brand IS NULL OR LOWER(p.brand) = LOWER(CAST(:brand AS text)))
+          AND (:minPrice IS NULL OR p.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR p.base_price <= :maxPrice)
+          AND (
+            :keyword IS NULL OR CAST(:keyword AS text) = ''
+            OR to_tsvector('simple', p.name || ' ' || coalesce(p.description, '') || ' ' || coalesce(p.brand, '')) 
+               @@ websearch_to_tsquery('simple', CAST(:keyword AS text))
+          )
+        """,
+        nativeQuery = true)
     Page<Product> searchProducts(
         @Param("filterCategory") boolean filterCategory,
         @Param("categoryIds") java.util.Collection<UUID> categoryIds,
