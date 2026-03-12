@@ -1,7 +1,7 @@
 """Redis store for agent state and conversation memory."""
 
 import json
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import redis.asyncio as aioredis
 
@@ -58,6 +58,27 @@ class RedisStore:
         context = await self.get_context(thread_id) or {}
         context.update(updates)
         await self.save_context(thread_id, context, ttl)
+
+    # ---- Conversation History (Messages) ----
+
+    async def load_messages(self, thread_id: str) -> List[dict]:
+        """Load serialized message history for a thread."""
+        key = f"agent:messages:{thread_id}"
+        data = await self._redis.get(key)
+        if data:
+            return json.loads(data)
+        return []
+
+    async def save_messages(self, thread_id: str, messages: List[dict], ttl: int = 3600):
+        """Persist serialized message history with TTL (auto-expires conversation)."""
+        key = f"agent:messages:{thread_id}"
+        await self._redis.set(key, json.dumps(messages, ensure_ascii=False), ex=ttl)
+
+    async def clear_messages(self, thread_id: str):
+        """Delete the conversation history for a thread."""
+        key = f"agent:messages:{thread_id}"
+        await self._redis.delete(key)
+        logger.info("Conversation history cleared", thread_id=thread_id)
 
     # ---- Cart State ----
 
