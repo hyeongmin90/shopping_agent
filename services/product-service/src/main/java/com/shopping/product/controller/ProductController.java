@@ -39,7 +39,7 @@ public class ProductController {
         @RequestParam(required = false) String search,
         @RequestParam(defaultValue = "0") @Min(0) int page,
         @RequestParam(defaultValue = "20") @Min(1) int size,
-        @RequestParam(defaultValue = "createdAt,desc") String[] sort
+        @RequestParam(defaultValue = "created_at,desc") String[] sort
     ) {
         ProductSearchRequest request = ProductSearchRequest.builder()
             .category(category)
@@ -70,7 +70,7 @@ public class ProductController {
 
     private Pageable buildPageable(int page, int size, String[] sort) {
         if (sort.length == 0 || sort[0].isBlank()) {
-            return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+            return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "created_at"));
         }
 
         String sortField = sort[0];

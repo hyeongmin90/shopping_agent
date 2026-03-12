@@ -32,7 +32,7 @@ public class ProductService {
     private final ProductVariantRepository productVariantRepository;
     private final CategoryRepository categoryRepository;
 
-    @Cacheable(value = "productSearch", key = "#request.cacheKey() + ':' + #pageable.pageNumber + ':' + #pageable.pageSize + ':' + #pageable.sort.toString()")
+    @Cacheable(value = "productSearch", key = "T(java.lang.String).format('%s:%d:%d:%s', #request.cacheKey(), #pageable.pageNumber, #pageable.pageSize, #pageable.sort.toString())")
     public Page<ProductResponse> searchProducts(ProductSearchRequest request, Pageable pageable) {
         String keyword = normalize(request.keyword());
         String brand = normalize(request.brand());

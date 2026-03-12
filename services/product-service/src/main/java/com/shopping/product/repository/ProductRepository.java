@@ -17,7 +17,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     Optional<Product> findDetailedById(@Param("id") UUID id);
 
     @Query(value = """
-        SELECT p.* FROM product p
+        SELECT p.* FROM products p
         WHERE (:filterCategory = false OR p.category_id IN :categoryIds)
           AND (:brand IS NULL OR LOWER(p.brand) = LOWER(CAST(:brand AS text)))
           AND (:minPrice IS NULL OR p.base_price >= :minPrice)
@@ -29,7 +29,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
           )
         """, 
         countQuery = """
-        SELECT count(*) FROM product p
+        SELECT count(*) FROM products p
         WHERE (:filterCategory = false OR p.category_id IN :categoryIds)
           AND (:brand IS NULL OR LOWER(p.brand) = LOWER(CAST(:brand AS text)))
           AND (:minPrice IS NULL OR p.base_price >= :minPrice)

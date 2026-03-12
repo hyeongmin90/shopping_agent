@@ -11,13 +11,11 @@ public record ProductSearchRequest(
         String keyword) {
 
     public String cacheKey() {
-        return String.join(
-                "|",
-                normalize(category),
-                normalize(brand),
-                minPrice == null ? "" : minPrice.toString(),
-                maxPrice == null ? "" : maxPrice.toString(),
-                normalize(keyword));
+        return "cat=" + normalize(category) +
+               "|brnd=" + normalize(brand) +
+               "|minP=" + (minPrice == null ? "" : minPrice) +
+               "|maxP=" + (maxPrice == null ? "" : maxPrice) +
+               "|kwd=" + normalize(keyword);
     }
 
     private String normalize(String value) {
