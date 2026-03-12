@@ -8,7 +8,7 @@ from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
-    """Shared state across all agents in the graph."""
+    """Shared state across the supervisor agent in the graph."""
 
     # Conversation messages
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -17,32 +17,6 @@ class AgentState(TypedDict):
     user_id: str
     thread_id: str
 
-    # Routing
-    next_agent: Optional[str]
-    current_agent: Optional[str]
-    supervisor_instruction: Optional[str]
-
-    # Final response
-    final_answer: Optional[str]
-
     # Conversation context (persisted in Redis)
     context: dict
 
-    # Cart/Order state
-    current_order_id: Optional[str]
-    cart_items: list
-
-    # Agent working memory
-    search_results: Optional[list]
-    review_analysis_result: Optional[dict]
-    inventory_status: Optional[dict]
-
-    # Control flow
-    requires_approval: bool
-    approval_data: Optional[dict]
-    error: Optional[str]
-    iteration_count: int
-
-    # Self-reflection
-    reflection: Optional[str]
-    should_retry: bool

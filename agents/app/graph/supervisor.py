@@ -1,396 +1,152 @@
-"""LangGraph Supervisor - Multi-agent orchestration graph."""
+"""Supervisor agent - langchain.agents.create_agent + Redis checkpointer for persistent memory."""
 
 import json
-from typing import Any, Optional
+from contextlib import asynccontextmanager
+from typing import Optional
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from langchain.agents import create_agent, AgentState
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.redis import AsyncRedisSaver
 
+from app.agents.workflows import AGENT_TOOLS
 from app.config import settings
-from app.graph.state import AgentState
-from app.graph.tools import ALL_TOOLS
-from app.agents.specialized import create_agent_runnable
 from app.memory.redis_store import RedisStore
 
 import structlog
 
 logger = structlog.get_logger()
 
-SUPERVISOR_PROMPT = """당신은 지능형 쇼핑 에이전트 시스템의 슈퍼바이저입니다.
-
-사용자의 메시지를 분석하여 적절한 전문 에이전트에게 작업을 위임합니다.
-
-사용 가능한 에이전트:
-1. product_search: 상품 검색, 카테고리 탐색, 상품 비교
-2. review_analysis: 리뷰 분석, 사이즈/품질 의견 종합
-3. cart_management: 장바구니 관리, 상품 추가/삭제, 예산 검증
-4. order_management: 주문 체크아웃, 결제, 주문 상태 확인
-5. customer_service: 주문 취소, 환불, 반품, 일반 문의
-
-라운팅 규칙 및 응답 방식:
-- 작업이 더 필요하면 적절한 에이전트를 선택하고, 구체적인 지시사항을 작성하세요.
-- 충분한 정보가 모여서 사용자에게 최종 답변을 할 수 있다면, next_agent를 "FINISH"로 설정하고 final_answer를 작성하세요. 한국어로 친절하게 답변해야 합니다.
-
-반드시 다음 JSON 형식 중 하나로만 응답하세요:
-
-작업 위임 시:
-{"next_agent": "에이전트이름", "instruction": "하위 에이전트에게 전달할 구체적인 작업 지시 내용"}
-
-최종 답변 시:
-{"next_agent": "FINISH", "final_answer": "사용자에게 제공할 최종 답변 내용"}"""
+# 대화 이력이 마지막으로 사용된 후 유지되는 시간 (초)
+# 이 시간이 지나면 Redis TTL에 의해 체크포인트가 자동 삭제되어 대화가 초기화됩니다.
+CONVERSATION_TTL = int(getattr(settings, "CONVERSATION_TTL", 3600))
 
 
-def _create_supervisor_node():
-    """Create the supervisor routing node."""
-    llm = ChatOpenAI(
-        model=settings.OPENAI_MODEL,
-        api_key=settings.OPENAI_API_KEY,
-        temperature=1,
+SUPERVISOR_PROMPT = """당신은 지능형 쇼핑 에이전트 시스템의 메인 슈퍼바이저입니다.
+
+당신은 사용자 요청을 해결하기 위해 여러 전문화된 하위 에이전트를 도구(Tool)로 사용할 수 있습니다.
+
+사용할 수 있는 전문 에이전트 도구:
+1. product_search_agent_tool: 상품 검색, 가격 비교, 카테고리 탐색, 재고 확인을 수행합니다.
+2. review_analysis_agent_tool: 상품 리뷰 요약, 사이즈/품질 의견 분석을 수행합니다.
+3. cart_management_agent_tool: 장바구니에 특정 상품 추가/삭제, 예산 관리를 수행합니다.
+4. customer_service_agent_tool: 기존 주문 내역 조회, 반품/환불 절차 안내, 쇼핑몰 정책(배송, 약관) 안내를 수행합니다.
+
+규칙 (매우 중요):
+- 사용자의 요청을 달성하기 위해 필요한 도구를 호출하세요.
+- 만약 사용자가 결제나 주소 입력 등 **주문(주문 생성/승인/체크아웃)**을 요구하면, **직접 처리할 수 없다**고 안내하고 웹사이트 화면의 장바구니/결제하기 버튼을 이용해 달라고 정중히 답변하세요.
+- 여러 단계의 분석이나 조치가 끝나면 최종적으로 수집된 정보를 바탕으로 사용자에게 한국어로 친절하고 완성된 형태의 최종 답변을 제공하세요.
+- 도구를 호출해야 하는 상황이면, 사용자에게 답변을 생성하지 말고 바로 도구를 호출하세요 (Tool Call).
+"""
+
+
+class ShoppingAgentState(AgentState):
+    """Extended agent state with user/session context."""
+    user_id: str = ""
+    thread_id: str = ""
+    context: dict = {}
+
+
+# ---------------------------------------------------------------------------
+# Agent factory
+# ---------------------------------------------------------------------------
+
+def supervisor_agent(checkpointer: AsyncRedisSaver):
+    """Create the supervisor agent with a Redis checkpointer.
+
+    `checkpointer`는 애플리케이션 시작 시 lifespan 안에서 생성되어 주입됩니다.
+    LangGraph가 thread_id 단위로 체크포인트를 자동 관리하므로,
+    별도의 메시지 직렬화 코드 없이 대화 이력이 유지됩니다.
+    """
+    llm = ChatOpenAI(model=settings.OPENAI_MODEL)
+
+    agent = create_agent(
+        model=llm,
+        tools=AGENT_TOOLS,
+        system_prompt=SUPERVISOR_PROMPT,
+        state_schema=ShoppingAgentState,
+        checkpointer=checkpointer,
     )
-
-    def supervisor(state: AgentState) -> dict:
-        messages = [SystemMessage(content=SUPERVISOR_PROMPT)]
-
-        # Add context about current state
-        context_info = ""
-        if state.get("current_order_id"):
-            context_info += f"\n현재 주문 ID: {state['current_order_id']}"
-        if state.get("cart_items"):
-            context_info += f"\n장바구니 상품 수: {len(state['cart_items'])}"
-        if state.get("context"):
-            ctx = state["context"]
-            if ctx.get("last_search"):
-                context_info += f"\n이전 검색: {ctx['last_search']}"
-            if ctx.get("budget"):
-                context_info += f"\n예산: {ctx['budget']}원"
-
-        if context_info:
-            messages.append(SystemMessage(content=f"현재 상태:{context_info}"))
-
-        # Add recent conversation messages (last 10)
-        recent = state.get("messages", [])[-10:]
-        messages.extend(recent)
-
-        response = llm.invoke(messages)
-
-        try:
-            result = json.loads(response.content)
-            next_agent = result.get("next_agent", "FINISH")
-            instruction = result.get("instruction", "")
-            final_answer = result.get("final_answer", "")
-        except (json.JSONDecodeError, AttributeError):
-            # Fallback
-            next_agent = "FINISH"
-            instruction = ""
-            final_answer = "답변을 생성하는 중 오류가 발생했습니다. 다시 질문해 주세요."
-
-        logger.info("Supervisor routed", next_agent=next_agent, instruction=instruction)
-
-        return {
-            "next_agent": next_agent,
-            "current_agent": next_agent if next_agent != "FINISH" else state.get("current_agent"),
-            "supervisor_instruction": instruction,
-            "final_answer": final_answer,
-        }
-
-    return supervisor
+    logger.info("Supervisor agent created with AsyncRedisSaver checkpointer")
+    return agent
 
 
-def _create_agent_node(agent_type: str):
-    """Create an agent execution node."""
-    llm_with_tools, tools, system_prompt = create_agent_runnable(agent_type)
+# ---------------------------------------------------------------------------
+# Checkpointer lifecycle helper (주입용)
+# ---------------------------------------------------------------------------
 
-    async def agent_node(state: AgentState) -> dict:
-        messages = [SystemMessage(content=system_prompt)]
-
-        # Add context
-        context = state.get("context", {})
-        if context:
-            context_msg = f"사용자 컨텍스트: {json.dumps(context, ensure_ascii=False)}"
-            messages.append(SystemMessage(content=context_msg))
-
-        # Add Supervisor Instruction
-        if state.get("supervisor_instruction"):
-            messages.append(
-                SystemMessage(
-                    content=f"슈퍼바이저의 지시사항: {state['supervisor_instruction']}\n이 지시사항에 따라 도구를 실행하고 결과를 요약하세요."
-                )
-            )
-
-        if state.get("current_order_id"):
-            messages.append(
-                SystemMessage(content=f"현재 주문 ID: {state['current_order_id']}")
-            )
-
-        # Add conversation history
-        messages.extend(state.get("messages", [])[-15:])
-
-        # Add self-reflection from previous iteration if any
-        if state.get("reflection"):
-            messages.append(
-                SystemMessage(
-                    content=f"이전 시도 반성: {state['reflection']}. 다른 접근을 시도하세요."
-                )
-            )
-
-        response = await llm_with_tools.ainvoke(messages)
-
-        # Check if the agent wants to request approval
-        requires_approval = False
-        approval_data = None
-
-        if agent_type == "order_management" and response.content:
-            content_lower = response.content.lower() if isinstance(response.content, str) else ""
-            if "승인" in content_lower or "확인" in content_lower:
-                if state.get("current_order_id"):
-                    requires_approval = True
-                    approval_data = {
-                        "order_id": state.get("current_order_id"),
-                        "action": "purchase_approval",
-                    }
-
-        result = {
-            "messages": [response],
-            "iteration_count": state.get("iteration_count", 0) + 1,
-        }
-
-        if requires_approval:
-            result["requires_approval"] = True
-            result["approval_data"] = approval_data
-
-        return result
-
-    return agent_node
+@asynccontextmanager
+async def create_redis_checkpointer():
+    """AsyncRedisSaver를 생성하고 필요한 인덱스를 세팅한 뒤 반환합니다."""
+    async with AsyncRedisSaver.from_conn_string(settings.REDIS_URL) as saver:
+        await saver.asetup()
+        logger.info("Redis checkpointer initialized")
+        yield saver
 
 
-def _should_continue(state: AgentState) -> str:
-    """Determine if the agent should continue, use tools, or finish."""
-    messages = state.get("messages", [])
-    if not messages:
-        return "end"
-
-    last_message = messages[-1]
-
-    # Check iteration limit
-    if state.get("iteration_count", 0) >= settings.MAX_AGENT_ITERATIONS:
-        logger.warning("Agent hit iteration limit")
-        return "end"
-
-    # If approval required, end and return to user
-    if state.get("requires_approval"):
-        return "end"
-
-    # If last message has tool calls, execute tools
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-
-    return "end"
-
-
-def _self_reflect(state: AgentState) -> dict:
-    """Self-reflection node — analyze if results are satisfactory."""
-    messages = state.get("messages", [])
-    if not messages:
-        return {"should_retry": False}
-
-    last_messages = messages[-3:]
-    has_error = any(
-        "error" in (getattr(m, "content", "") or "").lower()
-        for m in last_messages
-        if isinstance(m, ToolMessage)
-    )
-
-    if has_error and state.get("iteration_count", 0) < settings.MAX_AGENT_ITERATIONS - 2:
-        return {
-            "should_retry": True,
-            "reflection": "이전 도구 호출에서 오류가 발생했습니다. 다른 방법을 시도해야 합니다.",
-        }
-
-    return {"should_retry": False, "reflection": None}
-
-
-def _route_after_reflection(state: AgentState) -> str:
-    """Route based on self-reflection result."""
-    if state.get("should_retry"):
-        return state.get("current_agent", "product_search")
-    return "supervisor"
-
-
-def create_supervisor_graph():
-    """Create the multi-agent supervisor graph."""
-    workflow = StateGraph(AgentState)
-
-    # Add nodes
-    workflow.add_node("supervisor", _create_supervisor_node())
-    workflow.add_node("product_search", _create_agent_node("product_search"))
-    workflow.add_node("review_analysis", _create_agent_node("review_analysis"))
-    workflow.add_node("cart_management", _create_agent_node("cart_management"))
-    workflow.add_node("order_management", _create_agent_node("order_management"))
-    workflow.add_node("customer_service", _create_agent_node("customer_service"))
-    workflow.add_node("tools", ToolNode(ALL_TOOLS))
-    workflow.add_node("reflect", _self_reflect)
-
-    # Set entry point
-    workflow.set_entry_point("supervisor")
-
-    # Supervisor routes to specific agent or END
-    workflow.add_conditional_edges(
-        "supervisor",
-        lambda state: state.get("next_agent", "FINISH"),
-        {
-            "product_search": "product_search",
-            "review_analysis": "review_analysis",
-            "cart_management": "cart_management",
-            "order_management": "order_management",
-            "customer_service": "customer_service",
-            "FINISH": END,
-        },
-    )
-
-    # Each agent either calls tools or finishes
-    for agent in [
-        "product_search",
-        "review_analysis",
-        "cart_management",
-        "order_management",
-        "customer_service",
-    ]:
-        workflow.add_conditional_edges(
-            agent,
-            _should_continue,
-            {"tools": "tools", "end": "reflect"},
-        )
-
-    # Tools return to the current agent
-    workflow.add_conditional_edges(
-        "tools",
-        lambda state: state.get("current_agent", "product_search"),
-        {
-            "product_search": "product_search",
-            "review_analysis": "review_analysis",
-            "cart_management": "cart_management",
-            "order_management": "order_management",
-            "customer_service": "customer_service",
-        },
-    )
-
-    # Reflection either retries or returns to supervisor
-    workflow.add_conditional_edges(
-        "reflect",
-        _route_after_reflection,
-        {
-            "product_search": "product_search",
-            "review_analysis": "review_analysis",
-            "cart_management": "cart_management",
-            "order_management": "order_management",
-            "customer_service": "customer_service",
-            "supervisor": "supervisor",
-        },
-    )
-
-    graph = workflow.compile()
-    logger.info("Supervisor graph compiled successfully")
-    return graph
-
+# ---------------------------------------------------------------------------
+# Run helper
+# ---------------------------------------------------------------------------
 
 async def run_agent(
-    graph,
+    agent,
     message: str,
     thread_id: str,
     user_id: str,
     context: dict,
     redis_store: RedisStore,
-    is_approval: bool = False,
-    approved: Optional[bool] = None,
-    order_id: Optional[str] = None,
 ) -> dict:
-    """Run the agent graph with a user message."""
-    initial_state: AgentState = {
-        "messages": [HumanMessage(content=message)],
-        "user_id": user_id,
-        "thread_id": thread_id,
-        "next_agent": None,
-        "current_agent": None,
-        "context": context,
-        "current_order_id": context.get("current_order_id") or order_id,
-        "cart_items": context.get("cart_items", []),
-        "search_results": None,
-        "review_analysis_result": None,
-        "inventory_status": None,
-        "requires_approval": False,
-        "approval_data": None,
-        "error": None,
-        "iteration_count": 0,
-        "reflection": None,
-        "should_retry": False,
-        "supervisor_instruction": None,
-        "final_answer": None,
+    """Invoke the supervisor agent.
+
+    체크포인터가 thread_id 기준으로 대화 이력을 자동으로 저장/복원합니다.
+    `CONVERSATION_TTL` 초 이후 Redis TTL 만료 시 대화가 초기화됩니다.
+    """
+
+    # 세션 컨텍스트(최근 상품, 예산 등)를 시스템 보조 메시지로 삽입
+    ctx_str = json.dumps(context, ensure_ascii=False)
+    ctx_sys_msg = SystemMessage(
+        content=f"[시스템] 현재 사용자 세션 상태 (사용자에게 노출하지 마세요):\n{ctx_str}"
+    )
+
+    # 에이전트에 전달하는 새 메시지만 넣으면, 체크포인터가 자동으로 이전 이력을 붙여줍니다.
+    input_messages = [ctx_sys_msg, HumanMessage(content=message)]
+
+    # thread_id 단위로 체크포인트 저장 / TTL은 saver.ttl로 제어할 수 있습니다.
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+        }
     }
 
-    # Handle approval flow
-    if is_approval and approved and order_id:
-        from app.tools.service_clients import approve_order
-        try:
-            result = await approve_order(order_id)
-            return {
-                "response": f"주문이 승인되어 처리를 시작합니다. 주문 ID: {order_id}\n결제 및 재고 확인이 진행됩니다.",
-                "agent_used": "order_management",
-                "updated_context": {"current_order_id": order_id},
-            }
-        except Exception as e:
-            return {
-                "response": f"주문 승인 중 오류가 발생했습니다: {str(e)}",
-                "agent_used": "order_management",
-            }
-    elif is_approval and not approved:
-        if order_id:
-            from app.tools.service_clients import cancel_order
-            try:
-                await cancel_order(order_id, "사용자 거부")
-            except Exception:
-                pass
-        return {
-            "response": "주문이 취소되었습니다. 다른 도움이 필요하시면 말씀해주세요.",
-            "agent_used": "order_management",
-        }
-
-    # Run the graph
     try:
-        final_state = await graph.ainvoke(initial_state)
+        final_state = await agent.ainvoke(
+            {
+                "messages": input_messages,
+                "user_id": user_id,
+                "thread_id": thread_id,
+                "context": context,
+            },
+            config,
+        )
 
-        # Extract response from the supervisor's final_answer
-        response = final_state.get("final_answer")
-        if not response:
-            # Fallback to the last AI message
-            response = "죄송합니다, 요청을 처리하지 못했습니다. 다시 시도해 주세요."
-            for msg in reversed(final_state.get("messages", [])):
-                if isinstance(msg, AIMessage) and msg.content:
-                    response = msg.content
-                    break
-        
-        agent_used = final_state.get("current_agent")
-
-        # Build updated context
-        updated_context = {}
-        if final_state.get("current_order_id"):
-            updated_context["current_order_id"] = final_state["current_order_id"]
-        if final_state.get("cart_items"):
-            updated_context["cart_items"] = final_state["cart_items"]
+        # 최종 AI 응답 추출
+        response = "죄송합니다, 요청을 처리하지 못했습니다."
+        for msg in reversed(final_state.get("messages", [])):
+            if isinstance(msg, AIMessage) and msg.content:
+                response = msg.content
+                break
 
         return {
             "response": response,
             "thread_id": thread_id,
-            "requires_approval": final_state.get("requires_approval", False),
-            "approval_data": final_state.get("approval_data"),
-            "agent_used": agent_used,
-            "updated_context": updated_context,
+            "agent_used": "supervisor",
+            "updated_context": final_state.get("context", context),
         }
+
     except Exception as e:
-        logger.error("Agent graph execution failed", error=str(e))
+        logger.error("Supervisor agent execution failed", error=str(e), thread_id=thread_id)
         return {
-            "response": f"처리 중 오류가 발생했습니다: {str(e)}\n다시 시도해 주세요.",
+            "response": f"처리 중 내부 오류가 발생했습니다: {str(e)}",
             "agent_used": None,
             "error": str(e),
         }

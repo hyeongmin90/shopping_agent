@@ -25,6 +25,8 @@ async def search_products(
     brand: Optional[str] = None,
     min_price: Optional[int] = None,
     max_price: Optional[int] = None,
+    user_id: Annotated[str, InjectedState("user_id")] = None,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
     """Search products in the store. Prices are in KRW (Korean Won).
 
@@ -46,6 +48,17 @@ async def search_products(
             min_price=min_price,
             max_price=max_price,
         )
+        
+        # Save recently shown products to redis context
+        if user_id and thread_id and isinstance(result, dict) and "content" in result:
+            recent_products = [{"id": p["id"], "name": p["name"]} for p in result["content"]]
+            if recent_products:
+                from app.memory.redis_store import RedisStore
+                redis_store = RedisStore()
+                await redis_store.initialize()
+                await redis_store.update_context(thread_id, {"recent_products": recent_products})
+                await redis_store.close()
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -259,73 +272,6 @@ async def get_user_orders(user_id: Annotated[str, InjectedState("user_id")]) -> 
         return json.dumps({"error": str(e)})
 
 
-@tool
-async def checkout_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
-    """Submit shopping cart for checkout - creating a pending order.
-    The user must approve the newly created order before it is placed.
-
-    Returns:
-        JSON with the new order details (including new order ID)
-    """
-    try:
-        result = await sc.checkout_cart(user_id)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-@tool
-async def approve_order(order_id: str) -> str:
-    """Approve and place the order after user confirmation.
-    This triggers the payment and inventory reservation process.
-
-    Args:
-        order_id: Order UUID (must be in PENDING_APPROVAL status)
-
-    Returns:
-        JSON with order status
-    """
-    try:
-        result = await sc.approve_order(order_id)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-@tool
-async def cancel_order(order_id: str, reason: Optional[str] = None) -> str:
-    """Cancel an order.
-
-    Args:
-        order_id: Order UUID
-        reason: Optional cancellation reason
-
-    Returns:
-        JSON with cancellation result
-    """
-    try:
-        result = await sc.cancel_order(order_id, reason)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-@tool
-async def request_refund(order_id: str, reason: Optional[str] = None) -> str:
-    """Request a refund for a confirmed order.
-
-    Args:
-        order_id: Order UUID
-        reason: Reason for refund
-
-    Returns:
-        JSON with refund request result
-    """
-    try:
-        result = await sc.request_refund(order_id, reason)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
 
 
 # ============================================================
@@ -380,10 +326,9 @@ PRODUCT_TOOLS = [search_products, get_product_details, get_categories]
 REVIEW_TOOLS = [get_product_reviews, get_review_summary, search_reviews]
 CART_TOOLS = [
     get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity,
-    checkout_cart,
 ]
 ORDER_TOOLS = [
-    get_order_details, get_user_orders, approve_order, cancel_order, request_refund,
+    get_order_details, get_user_orders,
 ]
 INVENTORY_TOOLS = [check_inventory, get_product_stock]
 
@@ -400,6 +345,8 @@ async def rag_search_reviews(
     product_id: Optional[str] = None,
     min_rating: Optional[int] = None,
     verified_only: bool = False,
+    user_id: Annotated[str, InjectedState("user_id")] = None,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
     """Search product reviews using semantic vector search.
 
@@ -424,6 +371,26 @@ async def rag_search_reviews(
             min_rating=min_rating,
             verified_only=verified_only,
         )
+        
+        # Extract product references from review search and save to recent context
+        if user_id and thread_id and isinstance(results, dict) and "results" in results:
+            recent_products = []
+            seen = set()
+            for r in results["results"]:
+                pid = r.get("product_id")
+                pname = r.get("product_name")
+                if pid and pid not in seen:
+                    recent_products.append({"id": pid, "name": pname or "Unknown"})
+                    seen.add(pid)
+            
+            if recent_products:
+                from app.memory.redis_store import RedisStore
+                redis_store = RedisStore()
+                await redis_store.initialize()
+                await redis_store.update_context(thread_id, {"recent_products": recent_products})
+                await redis_store.close()
+                
+
         return json.dumps(results, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
