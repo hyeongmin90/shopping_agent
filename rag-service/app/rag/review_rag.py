@@ -20,7 +20,7 @@ async def search_reviews_rag(
     min_rating: int | None = None,
     verified_only: bool = False,
     limit: int = 10,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Semantic review search — vector-first strategy.
 
     Uses embedding similarity to find reviews matching the user's intent,
@@ -72,7 +72,6 @@ async def search_reviews_rag(
                     "rating": rating,
                     "title": payload.get("title", ""),
                     "content": payload.get("content", ""),
-                    "size_feedback": payload.get("size_feedback", ""),
                     "quality_rating": payload.get("quality_rating", 0),
                     "verified_purchase": payload.get("verified_purchase", False),
                     "helpful_count": payload.get("helpful_count", 0),

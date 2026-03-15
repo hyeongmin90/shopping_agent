@@ -6,9 +6,9 @@ On new review creation, generates embeddings and stores them in PostgreSQL (vect
 
 import asyncio
 import json
-from typing import Optional
+from typing import Any, Optional
 
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError  # pyright: ignore[reportMissingImports]
 
 import structlog
 
@@ -27,7 +27,7 @@ class EmbeddingPipeline:
     def __init__(self):
         self._consumer: Optional[Consumer] = None
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task[None]] = None
 
     def initialize(self) -> None:
         """Initialize the Kafka consumer for embedding pipeline."""
@@ -38,8 +38,9 @@ class EmbeddingPipeline:
             "enable.auto.commit": False,
             "max.poll.interval.ms": 300000,
         }
-        self._consumer = Consumer(consumer_config)
-        self._consumer.subscribe(["review.events"])
+        consumer = Consumer(consumer_config)
+        consumer.subscribe(["review.events"])
+        self._consumer = consumer
         logger.info(
             "embedding_pipeline_initialized",
             topics=["review.events"],
@@ -68,7 +69,13 @@ class EmbeddingPipeline:
         """Main consumption loop — polls Kafka and processes events."""
         while self._running:
             try:
-                msg = self._consumer.poll(timeout=1.0)
+                consumer = self._consumer
+                if consumer is None:
+                    logger.error("embedding_pipeline_consumer_not_initialized")
+                    await asyncio.sleep(1)
+                    continue
+
+                msg = consumer.poll(timeout=1.0)
                 if msg is None:
                     await asyncio.sleep(0.1)
                     continue
@@ -84,14 +91,14 @@ class EmbeddingPipeline:
                 try:
                     envelope = json.loads(msg.value().decode("utf-8"))
                     await self._process_event(envelope, msg.topic())
-                    self._consumer.commit(msg)
+                    consumer.commit(msg)
                 except json.JSONDecodeError as e:
                     logger.error(
                         "embedding_pipeline_parse_error",
                         error=str(e),
                         topic=msg.topic(),
                     )
-                    self._consumer.commit(msg)  # Skip malformed messages
+                    consumer.commit(msg)  # Skip malformed messages
                 except Exception as e:
                     logger.error(
                         "embedding_pipeline_process_error",
@@ -106,7 +113,7 @@ class EmbeddingPipeline:
                 logger.error("embedding_pipeline_loop_error", error=str(e))
                 await asyncio.sleep(5)  # Back off on unexpected errors
 
-    async def _process_event(self, envelope: dict, topic: str) -> None:
+    async def _process_event(self, envelope: dict[str, Any], topic: str) -> None:
         """Route event to appropriate handler based on event type."""
         # Support both flat and nested envelope formats
         meta = envelope.get("meta", envelope)
@@ -127,7 +134,7 @@ class EmbeddingPipeline:
                 event_type=event_type,
             )
 
-    async def _handle_review_event(self, data: dict) -> None:
+    async def _handle_review_event(self, data: dict[str, Any]) -> None:
         """Embed and store a review in PostgreSQL."""
         review_id = data.get("reviewId", data.get("review_id", ""))
         product_id = data.get("productId", data.get("product_id", ""))
@@ -135,7 +142,6 @@ class EmbeddingPipeline:
         content = data.get("content", "")
         rating = data.get("rating", 0)
         product_name = data.get("productName", data.get("product_name", ""))
-        size_feedback = data.get("sizeFeedback", data.get("size_feedback", ""))
         quality_rating = data.get("qualityRating", data.get("quality_rating", 0))
         verified_purchase = data.get("verifiedPurchase", data.get("verified_purchase", False))
         helpful_count = data.get("helpfulCount", data.get("helpful_count", 0))
@@ -158,7 +164,6 @@ class EmbeddingPipeline:
                 "title": title,
                 "content": content,
                 "rating": rating,
-                "size_feedback": size_feedback,
                 "quality_rating": quality_rating,
                 "verified_purchase": verified_purchase,
                 "helpful_count": helpful_count,
