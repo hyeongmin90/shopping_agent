@@ -12,6 +12,5 @@ public class ReviewSummaryResponse implements Serializable {
     Double averageRating;
     Long totalReviews;
     Map<Integer, Long> ratingDistribution;
-    Map<String, Long> sizeFeedbackDistribution;
     Double averageQualityRating;
 }

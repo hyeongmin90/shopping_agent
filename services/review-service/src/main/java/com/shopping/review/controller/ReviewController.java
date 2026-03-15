@@ -4,7 +4,6 @@ import com.shopping.review.dto.CreateReviewRequest;
 import com.shopping.review.dto.ReviewResponse;
 import com.shopping.review.dto.ReviewSearchRequest;
 import com.shopping.review.dto.ReviewSummaryResponse;
-import com.shopping.review.domain.SizeFeedback;
 import com.shopping.review.service.ReviewService;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -36,9 +35,7 @@ public class ReviewController {
             @RequestParam(defaultValue = "desc") String direction,
             @RequestParam(required = false) Integer minRating,
             @RequestParam(required = false) Integer maxRating,
-            @RequestParam(required = false) SizeFeedback sizeFeedback,
-            @RequestParam(defaultValue = "false") Boolean verifiedOnly
-    ) {
+            @RequestParam(defaultValue = "false") Boolean verifiedOnly) {
         return reviewService.getReviewsByProduct(
                 productId,
                 page,
@@ -47,9 +44,7 @@ public class ReviewController {
                 direction,
                 minRating,
                 maxRating,
-                sizeFeedback,
-                verifiedOnly
-        );
+                verifiedOnly);
     }
 
     @GetMapping("/product/{productId}/summary")
@@ -67,8 +62,7 @@ public class ReviewController {
             @RequestParam(defaultValue = "desc") String direction,
             @RequestParam(required = false) Integer minRating,
             @RequestParam(required = false) Integer maxRating,
-            @RequestParam(defaultValue = "false") Boolean verifiedOnly
-    ) {
+            @RequestParam(defaultValue = "false") Boolean verifiedOnly) {
         ReviewSearchRequest request = new ReviewSearchRequest();
         request.setProductId(productId);
         request.setKeyword(keyword);

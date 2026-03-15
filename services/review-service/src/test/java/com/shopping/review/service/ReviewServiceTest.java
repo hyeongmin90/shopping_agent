@@ -5,14 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.shopping.review.domain.Review;
-import com.shopping.review.domain.SizeFeedback;
 import com.shopping.review.dto.CreateReviewRequest;
 import com.shopping.review.dto.ReviewResponse;
-import com.shopping.review.kafka.ReviewEventPublisher;
+import com.shopping.review.outbox.OutboxService;
 import com.shopping.review.repository.ReviewRepository;
 import java.util.List;
 import java.util.UUID;
@@ -33,7 +33,7 @@ class ReviewServiceTest {
     private ReviewRepository reviewRepository;
 
     @Mock
-    private ReviewEventPublisher reviewEventPublisher;
+    private OutboxService outboxService;
 
     @InjectMocks
     private ReviewService reviewService;
@@ -50,7 +50,6 @@ class ReviewServiceTest {
         request.setRating(5);
         request.setTitle("Great product");
         request.setContent("Highly recommended");
-        request.setSizeFeedback(SizeFeedback.TRUE_TO_SIZE);
         request.setQualityRating(5);
         request.setVerifiedPurchase(true);
 
@@ -61,7 +60,6 @@ class ReviewServiceTest {
                 .rating(5)
                 .title("Great product")
                 .content("Highly recommended")
-                .sizeFeedback(SizeFeedback.TRUE_TO_SIZE)
                 .qualityRating(5)
                 .verifiedPurchase(true)
                 .helpfulCount(0)
@@ -75,8 +73,17 @@ class ReviewServiceTest {
         // then
         assertThat(response.getProductId()).isEqualTo(productId);
         assertThat(response.getRating()).isEqualTo(5);
+        assertThat(response.getQualityRating()).isEqualTo(5);
+        assertThat(response.getQualityRating()).isEqualTo(5);
         verify(reviewRepository).save(any(Review.class));
-        verify(reviewEventPublisher).publishReviewCreated(any());
+        verify(outboxService).enqueue(
+                eq("Review"),
+                eq(savedReview.getId()),
+                eq("ReviewCreatedEvent"),
+                any(),
+                any(),
+                isNull(),
+                eq("review-created-" + savedReview.getId()));
     }
 
     @Test
@@ -93,12 +100,12 @@ class ReviewServiceTest {
         Page<Review> page = new PageImpl<>(List.of(review));
 
         when(reviewRepository.findByProductWithFilters(
-                eq(productId), any(), any(), any(), anyBoolean(), any(Pageable.class)
+                eq(productId), any(), any(), anyBoolean(), any(Pageable.class)
         )).thenReturn(page);
 
         // when
         Page<ReviewResponse> result = reviewService.getReviewsByProduct(
-                productId, 0, 10, "createdAt", "desc", null, null, null, false
+                productId, 0, 10, "createdAt", "desc", null, null, false
         );
 
         // then
@@ -114,7 +121,7 @@ class ReviewServiceTest {
 
         // when & then
         assertThatThrownBy(() -> reviewService.getReviewsByProduct(
-                productId, 0, 10, "invalidField", "desc", null, null, null, false
+                productId, 0, 10, "invalidField", "desc", null, null, false
         )).isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Unsupported sortBy");
     }

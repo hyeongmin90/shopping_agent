@@ -1,7 +1,6 @@
 package com.shopping.review.controller;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -76,7 +75,7 @@ class ReviewControllerTest {
                 .build();
 
         when(reviewService.getReviewsByProduct(
-                eq(productId), anyInt(), anyInt(), any(), any(), any(), any(), any(), anyBoolean()
+                eq(productId), anyInt(), anyInt(), any(), any(), any(), any(), any()
         )).thenReturn(new PageImpl<>(List.of(response)));
 
         // when & then

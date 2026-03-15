@@ -19,6 +19,9 @@ spring:
       port: 6379
   kafka:
     bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
   cache:
     type: redis
 
@@ -41,6 +44,14 @@ management:
     tracing:
       endpoint: http://localhost:4318/v1/traces
 
+app:
+  kafka:
+    topics:
+      review-events: review.events
+  outbox:
+    publish-interval-ms: 2000
+    batch-size: 100
+
 ---
 spring:
   config:
@@ -56,8 +67,19 @@ spring:
       port: 6379
   kafka:
     bootstrap-servers: kafka:29092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 management:
   otlp:
     tracing:
       endpoint: http://otel-collector:4318/v1/traces
+
+app:
+  kafka:
+    topics:
+      review-events: review.events
+  outbox:
+    publish-interval-ms: 2000
+    batch-size: 100

@@ -121,13 +121,13 @@ async def get_product_reviews(product_id: str, sort: str = "helpful") -> str:
 
 @tool
 async def get_review_summary(product_id: str) -> str:
-    """Get review summary including average rating, size feedback distribution, and quality rating.
+    """Get review summary including average rating and quality rating.
 
     Args:
         product_id: UUID of the product
 
     Returns:
-        JSON with averageRating, totalReviews, ratingDistribution, sizeFeedbackDistribution, averageQualityRating
+        JSON with averageRating, totalReviews, ratingDistribution, averageQualityRating
     """
     try:
         result = await sc.get_review_summary(product_id)

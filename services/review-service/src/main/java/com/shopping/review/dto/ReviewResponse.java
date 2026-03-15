@@ -1,6 +1,5 @@
 package com.shopping.review.dto;
 
-import com.shopping.review.domain.SizeFeedback;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.Builder;
@@ -15,7 +14,6 @@ public class ReviewResponse {
     Integer rating;
     String title;
     String content;
-    SizeFeedback sizeFeedback;
     Integer qualityRating;
     Boolean verifiedPurchase;
     Integer helpfulCount;

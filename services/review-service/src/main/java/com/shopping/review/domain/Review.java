@@ -2,8 +2,6 @@ package com.shopping.review.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
@@ -46,10 +44,6 @@ public class Review {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "size_feedback", length = 20)
-    private SizeFeedback sizeFeedback;
 
     @Column(name = "quality_rating")
     private Integer qualityRating;

@@ -3,20 +3,25 @@ package com.shopping.review.kafka;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Builder;
-import lombok.Value;
+import lombok.Getter;
 
-@Value
+@Getter
 @Builder
 public class EventEnvelope<T> {
-    EventMeta meta;
-    T data;
+    private EventMeta meta;
+    private T data;
 
-    @Value
+    @Getter
     @Builder
     public static class EventMeta {
-        UUID eventId;
-        String eventType;
-        Instant occurredAt;
-        String correlationId;
+        private UUID eventId;
+        private String eventType;
+        private Integer schemaVersion;
+        private Instant occurredAt;
+        private String producer;
+        private UUID correlationId;
+        private UUID causationId;
+        private String idempotencyKey;
+        private String traceparent;
     }
 }

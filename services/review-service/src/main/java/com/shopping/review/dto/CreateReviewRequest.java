@@ -1,6 +1,5 @@
 package com.shopping.review.dto;
 
-import com.shopping.review.domain.SizeFeedback;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -28,9 +27,6 @@ public class CreateReviewRequest {
 
     @NotBlank
     private String content;
-
-    private SizeFeedback sizeFeedback;
-
     @Min(1)
     @Max(5)
     private Integer qualityRating;
