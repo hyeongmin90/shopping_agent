@@ -1,7 +1,8 @@
 """Redis store for agent state and conversation memory."""
 
+from inspect import isawaitable
 import json
-from typing import Any, List, Optional
+from typing import Any, Awaitable, cast
 
 import redis.asyncio as aioredis
 
@@ -16,7 +17,13 @@ class RedisStore:
     """Redis-backed store for agent checkpoints and conversation context."""
 
     def __init__(self):
-        self._redis: Optional[aioredis.Redis] = None
+        self._redis: aioredis.Redis | None = None
+
+    @property
+    def _redis_client(self) -> aioredis.Redis:
+        if self._redis is None:
+            raise RuntimeError("Redis client is not initialized")
+        return self._redis
 
     async def initialize(self):
         """Initialize Redis connection."""
@@ -26,7 +33,9 @@ class RedisStore:
             decode_responses=True,
         )
         try:
-            await self._redis.ping()
+            ping_result = self._redis.ping()
+            if isawaitable(ping_result):
+                await cast(Awaitable[bool], ping_result)
             logger.info("Redis connection established", url=settings.REDIS_URL)
         except Exception as e:
             logger.error("Failed to connect to Redis", error=str(e))
@@ -40,20 +49,22 @@ class RedisStore:
 
     # ---- Conversation Context ----
 
-    async def save_context(self, thread_id: str, context: dict, ttl: int = 3600):
+    async def save_context(self, thread_id: str, context: dict[str, Any], ttl: int = 3600):
         """Save conversation context."""
+        redis = self._redis_client
         key = f"agent:context:{thread_id}"
-        await self._redis.set(key, json.dumps(context, ensure_ascii=False), ex=ttl)
+        await redis.set(key, json.dumps(context, ensure_ascii=False), ex=ttl)
 
-    async def get_context(self, thread_id: str) -> Optional[dict]:
+    async def get_context(self, thread_id: str) -> dict[str, Any] | None:
         """Get conversation context."""
+        redis = self._redis_client
         key = f"agent:context:{thread_id}"
-        data = await self._redis.get(key)
+        data = await redis.get(key)
         if data:
             return json.loads(data)
         return None
 
-    async def update_context(self, thread_id: str, updates: dict, ttl: int = 3600):
+    async def update_context(self, thread_id: str, updates: dict[str, Any], ttl: int = 3600):
         """Merge updates into existing context."""
         context = await self.get_context(thread_id) or {}
         context.update(updates)
@@ -61,72 +72,62 @@ class RedisStore:
 
     # ---- Conversation History (Messages) ----
 
-    async def load_messages(self, thread_id: str) -> List[dict]:
+    async def load_messages(self, thread_id: str) -> list[dict[str, Any]]:
         """Load serialized message history for a thread."""
+        redis = self._redis_client
         key = f"agent:messages:{thread_id}"
-        data = await self._redis.get(key)
+        data = await redis.get(key)
         if data:
             return json.loads(data)
         return []
 
-    async def save_messages(self, thread_id: str, messages: List[dict], ttl: int = 3600):
+    async def save_messages(self, thread_id: str, messages: list[dict[str, Any]], ttl: int = 3600):
         """Persist serialized message history with TTL (auto-expires conversation)."""
+        redis = self._redis_client
         key = f"agent:messages:{thread_id}"
-        await self._redis.set(key, json.dumps(messages, ensure_ascii=False), ex=ttl)
+        await redis.set(key, json.dumps(messages, ensure_ascii=False), ex=ttl)
 
     async def clear_messages(self, thread_id: str):
         """Delete the conversation history for a thread."""
+        redis = self._redis_client
         key = f"agent:messages:{thread_id}"
-        await self._redis.delete(key)
+        await redis.delete(key)
         logger.info("Conversation history cleared", thread_id=thread_id)
 
     # ---- Cart State ----
 
-    async def save_cart(self, user_id: str, cart: dict, ttl: int = 7200):
+    async def save_cart(self, user_id: str, cart: dict[str, Any], ttl: int = 7200):
         """Save cart state."""
+        redis = self._redis_client
         key = f"agent:cart:{user_id}"
-        await self._redis.set(key, json.dumps(cart, ensure_ascii=False), ex=ttl)
+        await redis.set(key, json.dumps(cart, ensure_ascii=False), ex=ttl)
 
-    async def get_cart(self, user_id: str) -> Optional[dict]:
+    async def get_cart(self, user_id: str) -> dict[str, Any] | None:
         """Get cart state."""
+        redis = self._redis_client
         key = f"agent:cart:{user_id}"
-        data = await self._redis.get(key)
+        data = await redis.get(key)
         if data:
-            return json.loads(data)
-        return None
-
-    # ---- Approval Tokens ----
-
-    async def save_approval_token(
-        self, token: str, order_data: dict, ttl: int = 300
-    ):
-        """Save pending approval token."""
-        key = f"agent:approval:{token}"
-        await self._redis.set(key, json.dumps(order_data, ensure_ascii=False), ex=ttl)
-
-    async def get_approval_token(self, token: str) -> Optional[dict]:
-        """Get and consume approval token."""
-        key = f"agent:approval:{token}"
-        data = await self._redis.get(key)
-        if data:
-            await self._redis.delete(key)
             return json.loads(data)
         return None
 
     # ---- Generic KV ----
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None):
+    async def set(self, key: str, value: Any, ttl: int | None = None):
         """Set a key-value pair."""
+        redis = self._redis_client
         serialized = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
         if ttl:
-            await self._redis.set(key, serialized, ex=ttl)
+            await redis.set(key, serialized, ex=ttl)
         else:
-            await self._redis.set(key, serialized)
+            await redis.set(key, serialized)
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """Get a value by key."""
-        return await self._redis.get(key)
+        redis = self._redis_client
+        return await redis.get(key)
 
     async def delete(self, key: str):
         """Delete a key."""
-        await self._redis.delete(key)
+        redis = self._redis_client
+        await redis.delete(key)

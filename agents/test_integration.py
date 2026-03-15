@@ -14,15 +14,10 @@ from app.graph.tools import (
     add_to_cart,
     update_cart_item_quantity,
     remove_from_cart,
-    checkout_cart,
     get_user_orders,
     get_order_details,
-    approve_order,
-    cancel_order,
-    request_refund,
     check_inventory,
     get_product_stock,
-    rag_search_products,
     rag_search_reviews,
     rag_search_policies
 )
@@ -76,7 +71,7 @@ async def main():
         await run_tool("check_inventory", check_inventory, {"product_id": product_id, "variant_id": test_variant_id, "quantity": 1})
         await run_tool("get_product_stock", get_product_stock, {"product_id": product_id})
 
-        # 4. Cart & Order Tools (The core flow)
+        # 4. Cart & Order Tools
         await run_tool("get_cart (Initial)", get_cart, {"user_id": user_id})
         
         cart_after_add = await run_tool("add_to_cart", add_to_cart, {
@@ -99,28 +94,11 @@ async def main():
                 "variant_id": test_variant_id
             })
 
-            # Since we want to test checkout, we will NOT remove it.
-        
-        # Checkout
-        checkout_res = await run_tool("checkout_cart", checkout_cart, {"user_id": user_id})
-        order_id = None
-        if checkout_res and "orderId" in checkout_res:
-            order_id = checkout_res["orderId"]
-            
-            # Order details & user orders
-            await run_tool("get_order_details", get_order_details, {"order_id": order_id})
-            await run_tool("get_user_orders", get_user_orders, {"user_id": user_id})
-            
-            # Approve order
-            await run_tool("approve_order", approve_order, {"order_id": order_id})
-            
-            # Note: Canceling/Refund might fail dependent on the strict state machine of the order, 
-            # but we invoke it to test connectivity
-            await run_tool("cancel_order", cancel_order, {"order_id": order_id, "reason": "test cancel"})
+        # Order Tools (read-only — checkout/approve/cancel are not exposed as LangGraph tools)
+        await run_tool("get_user_orders", get_user_orders, {"user_id": user_id})
 
     print("-" * 50)
     # 5. RAG Tools (Optional, tests Vector DB)
-    await run_tool("rag_search_products", rag_search_products, {"query": "시원한 여름 셔츠"})
     await run_tool("rag_search_policies", rag_search_policies, {"query": "환불 기한"})
     
     if product_id:

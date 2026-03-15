@@ -1,14 +1,13 @@
 """Application configuration."""
 
 from pydantic_settings import BaseSettings
-import os
 
 class Settings(BaseSettings):
     """Application settings from environment variables."""
 
     # OpenAI
 
-    OPENAI_API_KEY: str = "sk-mork-your-api-key" or os.getenv("OPENAI_API_KEY")
+    OPENAI_API_KEY: str = "sk-mock-your-api-key"
     OPENAI_MODEL: str = "gpt-5-mini"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSION: int = 1536
@@ -22,10 +21,6 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
-
-    # Kafka
-    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
-    KAFKA_GROUP_ID: str = "agent-service"
 
     # OpenTelemetry
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"

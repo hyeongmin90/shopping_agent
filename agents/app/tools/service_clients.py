@@ -117,7 +117,7 @@ async def get_categories() -> list:
     """Get all categories."""
     return await _request(
         "GET",
-        f"{settings.PRODUCT_SERVICE_URL}/api/categories",
+        f"{settings.PRODUCT_SERVICE_URL}/api/products/categories",
         "product-service",
     )
 
