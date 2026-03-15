@@ -4,6 +4,7 @@ import com.shopping.product.domain.Category;
 import com.shopping.product.domain.Product;
 import com.shopping.product.domain.ProductVariant;
 import com.shopping.product.dto.CategoryResponse;
+import com.shopping.product.dto.ProductRequest;
 import com.shopping.product.dto.ProductResponse;
 import com.shopping.product.dto.ProductSearchRequest;
 import com.shopping.product.dto.ProductVariantResponse;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +33,50 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
     private final CategoryRepository categoryRepository;
+
+    @Transactional
+    @CacheEvict(value = {"productSearch", "categoryTree"}, allEntries = true)
+    public ProductResponse addProduct(ProductRequest request) {
+        Category category = null;
+        if (request.getCategoryId() != null) {
+            category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Category not found: " + request.getCategoryId()));
+        }
+
+        Product product = new Product();
+        product.setId(UUID.randomUUID());
+        product.setName(request.getName());
+        product.setDescription(request.getDescription());
+        product.setBrand(request.getBrand());
+        product.setCategory(category);
+        product.setBasePrice(request.getBasePrice());
+        product.setCurrency(request.getCurrency() != null ? request.getCurrency() : "KRW");
+        product.setImageUrl(request.getImageUrl());
+        product.setStatus("ACTIVE");
+        product.setShippingDays(request.getShippingDays());
+        product.setCompatibilityTags(request.getCompatibilityTags() != null ? request.getCompatibilityTags() : List.of());
+
+        Product savedProduct = productRepository.save(product);
+
+        List<ProductVariant> savedVariants = new ArrayList<>();
+        if (request.getVariants() != null && !request.getVariants().isEmpty()) {
+            for (ProductRequest.VariantRequest vr : request.getVariants()) {
+                ProductVariant variant = new ProductVariant();
+                variant.setId(UUID.randomUUID());
+                variant.setProduct(savedProduct);
+                variant.setSku(vr.sku());
+                variant.setName(vr.name());
+                variant.setSize(vr.size());
+                variant.setColor(vr.color());
+                variant.setPriceAdjustment(vr.priceAdjustment() != null ? vr.priceAdjustment() : 0);
+                variant.setAttributes(vr.attributes());
+                variant.setStatus("ACTIVE");
+                savedVariants.add(productVariantRepository.save(variant));
+            }
+        }
+
+        return toProductResponse(savedProduct, savedVariants);
+    }
 
     @Cacheable(value = "productSearch", key = "T(java.lang.String).format('%s:%d:%d:%s', #request.cacheKey(), #pageable.pageNumber, #pageable.pageSize, #pageable.sort.toString())")
     public Page<ProductResponse> searchProducts(ProductSearchRequest request, Pageable pageable) {

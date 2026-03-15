@@ -1,13 +1,14 @@
 package com.shopping.product.controller;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.shopping.product.config.CorrelationIdFilter;
+import com.shopping.product.dto.ProductRequest;
 import com.shopping.product.dto.ProductResponse;
 import com.shopping.product.dto.ProductSearchRequest;
 import com.shopping.product.kafka.ProductEventPublisher;
@@ -22,6 +23,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = ProductController.class, excludeFilters = {
@@ -83,8 +85,55 @@ class ProductControllerTest {
         when(productService.getCategoryTree()).thenReturn(List.of());
 
         // when & then
-        mockMvc.perform(get("/api/categories"))
+        mockMvc.perform(get("/api/products/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    @DisplayName("상품 등록 API - 성공")
+    void addProduct_Api_Success() throws Exception {
+        // given
+        UUID productId = UUID.randomUUID();
+        ProductResponse product = ProductResponse.builder()
+                .id(productId)
+                .name("New Product")
+                .basePrice(15000)
+                .currency("KRW")
+                .status("ACTIVE")
+                .build();
+
+        when(productService.addProduct(any(ProductRequest.class))).thenReturn(product);
+
+        String requestBody = """
+                {
+                    "name": "New Product",
+                    "basePrice": 15000
+                }
+                """;
+
+        // when & then
+        mockMvc.perform(post("/api/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(productId.toString()))
+                .andExpect(jsonPath("$.name").value("New Product"))
+                .andExpect(jsonPath("$.basePrice").value(15000));
+    }
+
+    @Test
+    @DisplayName("상품 등록 API - 이름 누락 시 400 에러")
+    void addProduct_Api_MissingName() throws Exception {
+        String requestBody = """
+                {
+                    "basePrice": 15000
+                }
+                """;
+
+        mockMvc.perform(post("/api/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody))
+                .andExpect(status().isBadRequest());
     }
 }

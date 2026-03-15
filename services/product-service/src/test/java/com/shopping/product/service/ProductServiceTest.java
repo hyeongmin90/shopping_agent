@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.shopping.product.domain.Category;
 import com.shopping.product.domain.Product;
+import com.shopping.product.dto.ProductRequest;
 import com.shopping.product.dto.ProductResponse;
 import com.shopping.product.dto.ProductSearchRequest;
 import com.shopping.product.exception.ResourceNotFoundException;
@@ -44,6 +45,30 @@ class ProductServiceTest {
 
     @InjectMocks
     private ProductService productService;
+
+    @Test
+    @DisplayName("상품 등록 성공")
+    void addProduct_Success() {
+        // given
+        ProductRequest request = ProductRequest.builder()
+                .name("New Phone")
+                .basePrice(500000)
+                .brand("Samsung")
+                .build();
+
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        ProductResponse response = productService.addProduct(request);
+
+        // then
+        assertThat(response.name()).isEqualTo("New Phone");
+        assertThat(response.basePrice()).isEqualTo(500000);
+        assertThat(response.brand()).isEqualTo("Samsung");
+        assertThat(response.status()).isEqualTo("ACTIVE");
+        assertThat(response.currency()).isEqualTo("KRW");
+        verify(productRepository).save(any(Product.class));
+    }
 
     @Test
     @DisplayName("상품 상세 조회 성공")
