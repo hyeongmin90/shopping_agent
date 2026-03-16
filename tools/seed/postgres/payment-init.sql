@@ -37,6 +37,22 @@ CREATE TABLE IF NOT EXISTS idempotency_store (
     PRIMARY KEY (consumer_id, event_id)
 );
 
+-- Outbox Events (Transactional Outbox Pattern)
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate_type VARCHAR(50) NOT NULL,
+    aggregate_id VARCHAR(255) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    correlation_id VARCHAR(255),
+    causation_id VARCHAR(255),
+    idempotency_key VARCHAR(100),
+    published BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP
+);
+
 CREATE INDEX idx_payments_order ON payments(order_id);
 CREATE INDEX idx_payments_status ON payments(status);
 CREATE INDEX idx_refunds_payment ON refunds(payment_id);
+CREATE INDEX idx_outbox_unpublished ON outbox_events(published, created_at) WHERE NOT published;

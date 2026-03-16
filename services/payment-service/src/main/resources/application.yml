@@ -49,6 +49,9 @@ payment:
   mock-gateway:
     min-delay-ms: 100
     max-delay-ms: 500
+  outbox:
+    publish-interval-ms: 2000
+    batch-size: 100
 
 ---
 spring:
