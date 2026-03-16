@@ -61,6 +61,8 @@ public class SagaOrchestrator {
                 case "PaymentAuthorized" -> onPaymentAuthorized(orderId, data);
                 case "PaymentAuthorizationFailed" -> onPaymentAuthorizationFailed(orderId, data);
                 case "PaymentCaptured" -> onPaymentCaptured(orderId);
+                case "InventoryReservationCancelled" -> onInventoryReservationCancelled(orderId);
+                case "PaymentVoided" -> onPaymentVoided(orderId);
                 default -> log.debug("Ignoring unrelated event type {}", eventType);
             }
 
@@ -92,13 +94,20 @@ public class SagaOrchestrator {
         OrderEntity order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BadRequestException("Order not found for payment failure"));
         orderService.createCompensationCommands(order, reason);
-        orderService.markFailed(orderId, reason, "PAYMENT_AUTHORIZATION");
+        orderService.markSagaCompensating(orderId, reason);
     }
 
     private void onPaymentCaptured(UUID orderId) {
         orderService.markConfirmed(orderId);
     }
 
+    private void onInventoryReservationCancelled(UUID orderId) {
+        orderService.handleCompensationStepCompleted(orderId, "CANCEL_INVENTORY");
+    }
+
+    private void onPaymentVoided(UUID orderId) {
+        orderService.handleCompensationStepCompleted(orderId, "VOID_PAYMENT");
+    }
     private String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
         if (value.isMissingNode() || value.isNull() || value.asText().isBlank()) {

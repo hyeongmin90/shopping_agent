@@ -22,8 +22,11 @@ public class StuckSagaReaper {
     @Transactional
     @Scheduled(fixedDelayString = "${app.saga.reaper-interval-ms:10000}")
     public void reapTimedOutSagas() {
-        List<SagaState> timedOut = orderService.findTimedOutSagas(LocalDateTime.now());
-        for (SagaState sagaState : timedOut) {
+        LocalDateTime now = LocalDateTime.now();
+
+        // 1. Handle RUNNING sagas that timed out — trigger compensation
+        List<SagaState> timedOutRunning = orderService.findTimedOutSagas(now);
+        for (SagaState sagaState : timedOutRunning) {
             OrderEntity order = orderRepository.findById(sagaState.getOrderId()).orElse(null);
             if (order == null) {
                 continue;
@@ -32,6 +35,18 @@ public class StuckSagaReaper {
             orderService.createCompensationCommands(order, reason);
             orderService.markSagaCompensating(order.getId(), reason);
             log.warn("Compensation triggered for timed out order {}", order.getId());
+        }
+
+        // 2. Handle COMPENSATING sagas that timed out — retry compensation
+        List<SagaState> stuckCompensating = orderService.findStuckCompensatingSagas(now);
+        for (SagaState sagaState : stuckCompensating) {
+            if ("COMPENSATION_DONE".equals(sagaState.getCurrentStep())
+                    || "COMPENSATION_EXHAUSTED".equals(sagaState.getCurrentStep())) {
+                continue;
+            }
+            log.warn("Retrying stuck compensation for order {} (attempt {})",
+                    sagaState.getOrderId(), sagaState.getRetryCount() + 1);
+            orderService.retryCompensation(sagaState);
         }
     }
 }

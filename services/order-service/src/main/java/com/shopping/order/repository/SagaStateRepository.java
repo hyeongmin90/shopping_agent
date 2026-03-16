@@ -12,4 +12,6 @@ public interface SagaStateRepository extends JpaRepository<SagaState, UUID> {
     Optional<SagaState> findByOrderId(UUID orderId);
 
     List<SagaState> findByStatusAndTimeoutAtBefore(SagaStatus status, LocalDateTime timeoutAt);
+
+    List<SagaState> findByStatusInAndTimeoutAtBefore(List<SagaStatus> statuses, LocalDateTime timeoutAt);
 }

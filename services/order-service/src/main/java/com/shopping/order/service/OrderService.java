@@ -1,5 +1,8 @@
 package com.shopping.order.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopping.order.dto.ApproveOrderRequest;
 import com.shopping.order.dto.OrderResponse;
 import com.shopping.order.dto.RefundRequest;
@@ -14,17 +17,21 @@ import com.shopping.order.repository.OrderRepository;
 import com.shopping.order.repository.SagaStateRepository;
 import com.shopping.order.dto.OrderStatusResponse;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
@@ -32,6 +39,13 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
     private final OutboxService outboxService;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.saga.compensation.max-retries:5}")
+    private int compensationMaxRetries;
+
+    @Value("${app.saga.compensation.timeout-minutes:10}")
+    private int compensationTimeoutMinutes;
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
@@ -267,6 +281,8 @@ public class OrderService {
 
     @Transactional
     public void createCompensationCommands(OrderEntity order, String reason) {
+        List<String> expectedSteps = new ArrayList<>();
+
         if (order.getReservationId() != null) {
             outboxService.enqueue(
                     "ORDER",
@@ -275,7 +291,8 @@ public class OrderService {
                     Map.of("orderId", order.getId(), "reservationId", order.getReservationId()),
                     order.getId(),
                     null,
-                    "cancel-inv-" + order.getId());
+                    "cancel-inv-" + order.getId() + "-" + System.currentTimeMillis());
+            expectedSteps.add("CANCEL_INVENTORY");
         }
         if (order.getPaymentId() != null) {
             outboxService.enqueue(
@@ -285,13 +302,121 @@ public class OrderService {
                     Map.of("orderId", order.getId(), "paymentId", order.getPaymentId(), "reason", reason),
                     order.getId(),
                     null,
-                    "void-pay-" + order.getId());
+                    "void-pay-" + order.getId() + "-" + System.currentTimeMillis());
+            expectedSteps.add("VOID_PAYMENT");
         }
+
+        initCompensationTracking(order.getId(), expectedSteps);
+    }
+
+    @Transactional
+    public void handleCompensationStepCompleted(UUID orderId, String completedStep) {
+        SagaState sagaState = sagaStateRepository.findByOrderId(orderId).orElse(null);
+        if (sagaState == null) {
+            log.warn("No saga state found for compensation completion: orderId={}, step={}", orderId, completedStep);
+            return;
+        }
+
+        if (sagaState.getStatus() != SagaStatus.COMPENSATING) {
+            log.debug("Saga {} not in COMPENSATING state, ignoring step completion {}", orderId, completedStep);
+            return;
+        }
+
+        Map<String, Object> ctx = parseContext(sagaState);
+        @SuppressWarnings("unchecked")
+        List<String> completedSteps = (List<String>) ctx.computeIfAbsent("completedSteps", k -> new ArrayList<>());
+        if (!completedSteps.contains(completedStep)) {
+            completedSteps.add(completedStep);
+        }
+        sagaState.setContext(serializeContext(ctx));
+        sagaStateRepository.save(sagaState);
+
+        @SuppressWarnings("unchecked")
+        List<String> expectedSteps = (List<String>) ctx.getOrDefault("expectedSteps", List.of());
+        if (completedSteps.containsAll(expectedSteps)) {
+            log.info("All compensation steps completed for order {}, marking saga FAILED (terminal)", orderId);
+            sagaState.setStatus(SagaStatus.FAILED);
+            sagaState.setCurrentStep("COMPENSATION_DONE");
+            sagaStateRepository.save(sagaState);
+
+            OrderEntity order = findOrder(orderId);
+            order.setSagaStatus(OrderSagaStatus.FAILED);
+            orderRepository.save(order);
+        }
+    }
+
+    @Transactional
+    public void retryCompensation(SagaState sagaState) {
+        UUID orderId = sagaState.getOrderId();
+        OrderEntity order = orderRepository.findById(orderId).orElse(null);
+        if (order == null) {
+            log.warn("Order not found for compensation retry: {}", orderId);
+            return;
+        }
+
+        if (sagaState.getRetryCount() >= compensationMaxRetries) {
+            log.error("CRITICAL: Compensation retry limit ({}) exceeded for order {}. Manual intervention required.",
+                    compensationMaxRetries, orderId);
+            sagaState.setCurrentStep("COMPENSATION_EXHAUSTED");
+            sagaStateRepository.save(sagaState);
+            return;
+        }
+
+        Map<String, Object> ctx = parseContext(sagaState);
+        @SuppressWarnings("unchecked")
+        List<String> expectedSteps = (List<String>) ctx.getOrDefault("expectedSteps", List.of());
+        @SuppressWarnings("unchecked")
+        List<String> completedSteps = (List<String>) ctx.getOrDefault("completedSteps", List.of());
+
+        String reason = order.getFailureReason() != null ? order.getFailureReason() : "compensation retry";
+
+        for (String step : expectedSteps) {
+            if (completedSteps.contains(step)) {
+                continue;
+            }
+            switch (step) {
+                case "CANCEL_INVENTORY" -> {
+                    if (order.getReservationId() != null) {
+                        outboxService.enqueue(
+                                "ORDER",
+                                order.getId(),
+                                "CancelInventoryReservationCommand",
+                                Map.of("orderId", order.getId(), "reservationId", order.getReservationId()),
+                                order.getId(),
+                                null,
+                                "cancel-inv-" + order.getId() + "-retry-" + sagaState.getRetryCount());
+                    }
+                }
+                case "VOID_PAYMENT" -> {
+                    if (order.getPaymentId() != null) {
+                        outboxService.enqueue(
+                                "ORDER",
+                                order.getId(),
+                                "VoidPaymentCommand",
+                                Map.of("orderId", order.getId(), "paymentId", order.getPaymentId(), "reason", reason),
+                                order.getId(),
+                                null,
+                                "void-pay-" + order.getId() + "-retry-" + sagaState.getRetryCount());
+                    }
+                }
+                default -> log.warn("Unknown compensation step: {}", step);
+            }
+        }
+
+        sagaState.setRetryCount(sagaState.getRetryCount() + 1);
+        sagaState.setTimeoutAt(LocalDateTime.now().plusMinutes(compensationTimeoutMinutes));
+        sagaStateRepository.save(sagaState);
+        log.warn("Compensation retry {} for order {}", sagaState.getRetryCount(), orderId);
     }
 
     @Transactional(readOnly = true)
     public List<SagaState> findTimedOutSagas(LocalDateTime now) {
         return sagaStateRepository.findByStatusAndTimeoutAtBefore(SagaStatus.RUNNING, now);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SagaState> findStuckCompensatingSagas(LocalDateTime now) {
+        return sagaStateRepository.findByStatusAndTimeoutAtBefore(SagaStatus.COMPENSATING, now);
     }
 
     @Transactional
@@ -317,6 +442,39 @@ public class OrderService {
     private void ensureStatus(OrderEntity order, OrderStatus required, String message) {
         if (order.getStatus() != required) {
             throw new BadRequestException(message);
+        }
+    }
+
+    private void initCompensationTracking(UUID orderId, List<String> expectedSteps) {
+        sagaStateRepository.findByOrderId(orderId).ifPresent(sagaState -> {
+            Map<String, Object> ctx = parseContext(sagaState);
+            ctx.put("expectedSteps", expectedSteps);
+            ctx.put("completedSteps", new ArrayList<>());
+            sagaState.setContext(serializeContext(ctx));
+            sagaState.setTimeoutAt(LocalDateTime.now().plusMinutes(compensationTimeoutMinutes));
+            sagaStateRepository.save(sagaState);
+        });
+    }
+
+    private Map<String, Object> parseContext(SagaState sagaState) {
+        try {
+            String json = sagaState.getContext();
+            if (json == null || json.isBlank()) {
+                return new HashMap<>();
+            }
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse saga context for order {}: {}", sagaState.getOrderId(), e.getMessage());
+            return new HashMap<>();
+        }
+    }
+
+    private String serializeContext(Map<String, Object> ctx) {
+        try {
+            return objectMapper.writeValueAsString(ctx);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize saga context: {}", e.getMessage());
+            return "{}";
         }
     }
 
