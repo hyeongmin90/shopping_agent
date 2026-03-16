@@ -10,6 +10,7 @@ import com.shopping.order.repository.IdempotencyRecordRepository;
 import com.shopping.order.repository.OrderRepository;
 import com.shopping.order.service.OrderService;
 import java.io.IOException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,6 +70,9 @@ public class SagaOrchestrator {
             IdempotencyRecord record = new IdempotencyRecord();
             record.setId(new IdempotencyRecordId(CONSUMER_ID, eventId));
             idempotencyRecordRepository.save(record);
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Optimistic lock conflict while processing event, will be retried by Kafka: {}", e.getMessage());
+            throw e;
         } catch (IOException e) {
             throw new IllegalStateException("Invalid event payload", e);
         }
