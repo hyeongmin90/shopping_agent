@@ -52,6 +52,9 @@ app:
     topics:
       commands: inventory.commands
       events: inventory.events
+  outbox:
+    publish-interval-ms: 2000
+    batch-size: 100
 
 ---
 spring:
