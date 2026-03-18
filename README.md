@@ -58,7 +58,7 @@
 ### Agent 및 RAG (Python 환경)
 * **프레임워크**: FastAPI
 * **에이전트**: LangGraph, LangChain
-* **LLM 및 임베딩**: OpenAI GPT-4o-mini, text-embedding-3-small
+* **LLM 및 임베딩**: OpenAI GPT-5-mini, text-embedding-3-small
 * **데이터베이스**: PostgreSQL (pgvector 확장), Redis (세션/체크포인트)
 
 ### Backend 서비스 (Java 환경)

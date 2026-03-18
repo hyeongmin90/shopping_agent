@@ -18,12 +18,15 @@ import com.shopping.payment.messaging.model.VoidPaymentCommand;
 import com.shopping.payment.repository.PaymentRepository;
 import com.shopping.payment.repository.RefundRepository;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentCommandService {
@@ -34,6 +37,25 @@ public class PaymentCommandService {
 
     @Transactional
     public CommandProcessingResult handleAuthorize(AuthorizePaymentCommand command, String idempotencyKey) {
+        Optional<Payment> existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
+        if (existing.isPresent()) {
+            Payment existingPayment = existing.get();
+            log.info("Duplicate authorize request detected for idempotencyKey={}, returning existing payment {}",
+                    idempotencyKey, existingPayment.getId());
+            if (existingPayment.getStatus() == PaymentStatus.AUTHORIZED) {
+                return new CommandProcessingResult(
+                        "PaymentAuthorized",
+                        new PaymentAuthorizedData(existingPayment.getOrderId(), existingPayment.getId(),
+                                existingPayment.getAmount(), existingPayment.getAuthorizationCode())
+                );
+            }
+            return new CommandProcessingResult(
+                    "PaymentAuthorizationFailed",
+                    new PaymentAuthorizationFailedData(existingPayment.getOrderId(),
+                            existingPayment.getFailureReason(), "DUPLICATE", existingPayment.getId())
+            );
+        }
+
         Payment payment = new Payment();
         payment.setOrderId(command.orderId());
         payment.setUserId(command.userId());
