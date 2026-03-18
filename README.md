@@ -186,6 +186,65 @@ order.events, order.commands, order.dlq, inventory.events, inventory.commands, i
 2. **리뷰 RAG 동기화**: Review Service에서 새로운 리뷰가 작성되면 OutboxEvent 엔티티에 기록됩니다. 스케줄러가 이를 읽어 `review.events` 토픽으로 전송합니다. RAG Service가 이를 수신하여 OpenAI API로 임베딩을 만든 뒤 pgvector 데이터베이스에 저장합니다.
 3. **상품 조회 이벤트**: 사용자가 상품 상세를 조회하면 Product Service가 즉시 `product.viewed.v1` 이벤트를 발행해 시스템 전체에 조회 통계를 브로드캐스트합니다.
 
+### 주문 Saga 상세 플로우
+
+#### 1. 정상 주문 플로우
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C  as Client
+    participant OS as Order Service
+    participant SO as Saga Orchestrator
+    participant IS as Inventory Service
+    participant PS as Payment Service
+
+    C->>OS: POST /api/orders/{id}/approve
+    OS->>OS: status=PLACED, sagaStatus=RUNNING
+    OS->>IS: ReserveInventoryCommand
+    IS->>SO: InventoryReserved
+    SO->>OS: moveToPaymentAuthorizing(orderId, reservationId)
+    OS->>OS: status=PAYMENT_AUTHORIZING
+    OS->>PS: AuthorizePaymentCommand
+    PS->>SO: PaymentAuthorized
+    SO->>OS: handlePaymentAuthorized(orderId, paymentId)
+    OS->>IS: CommitInventoryCommand
+    OS->>PS: CapturePaymentCommand
+    PS->>SO: PaymentCaptured
+    SO->>OS: markConfirmed(orderId)
+    OS->>OS: status=CONFIRMED, sagaStatus=COMPLETED
+```
+
+#### 2. 실패 및 보상(Compensation) 플로우
+
+* **재고 예약 실패**: `InventoryReservationFailed` 이벤트가 들어오면 `markFailed(...)`가 호출되어 주문은 즉시 `FAILED`, Saga 상태도 `FAILED`로 종료됩니다.
+* **결제 승인 실패**: `PaymentAuthorizationFailed` 이벤트가 들어오면 `createCompensationCommands(...)`로 보상 명령을 생성한 뒤 `markSagaCompensating(...)`로 Saga를 `COMPENSATING` 상태로 전환합니다.
+* **보상 명령 생성 규칙**:
+  * `reservationId`가 있으면 `CancelInventoryReservationCommand` 발행
+  * `paymentId`가 있으면 `VoidPaymentCommand` 발행
+* **보상 완료 처리**:
+  * `InventoryReservationCancelled` 수신 시 `CANCEL_INVENTORY` 완료로 기록
+  * `PaymentVoided` 수신 시 `VOID_PAYMENT` 완료로 기록
+  * 기대한 보상 단계가 모두 끝나면 Saga는 최종적으로 `FAILED` 상태에서 종료되고 `currentStep`은 `COMPENSATION_DONE`으로 기록됩니다.
+
+#### 3. 타임아웃 및 재시도 플로우
+
+* `StuckSagaReaper`가 주기적으로 타임아웃된 Saga를 검사합니다.
+* **RUNNING Saga 타임아웃**:
+  * 현재 단계에서 응답이 오래 없으면 실패 사유를 `Saga timeout while in step ...` 형태로 기록
+  * 즉시 보상 명령을 발행하고 Saga를 `COMPENSATING`으로 전환
+* **COMPENSATING Saga 타임아웃**:
+  * 아직 끝나지 않은 보상 단계만 다시 발행
+  * `retryCount`를 증가시키고 `timeoutAt`을 연장
+  * 최대 재시도 횟수(`app.saga.compensation.max-retries`)를 초과하면 `COMPENSATION_EXHAUSTED`로 표시해 수동 개입이 필요함을 남김
+
+#### 4. 상태 전이 요약
+
+* **Order 상태**: `PENDING_APPROVAL` -> `PLACED` -> `INVENTORY_RESERVING` -> `PAYMENT_AUTHORIZING` -> `CONFIRMED` 또는 `FAILED`
+* **Saga 상태**: `RUNNING` -> `COMPLETED` 또는 `COMPENSATING` -> `FAILED`
+* **주요 Saga step**: `INVENTORY_RESERVATION` -> `PAYMENT_AUTHORIZATION` -> `COMPENSATION`/`DONE`
+* **멱등성 보장**: `SagaOrchestrator`는 `IdempotencyRecord`를 사용해 같은 Kafka 이벤트를 중복 처리하지 않습니다.
+
 ## F. 분산 추적 및 관측성 (Observability)
 
 요청이 여러 마이크로서비스를 넘나들기 때문에, 구조화된 추적 기능이 필수적입니다.
