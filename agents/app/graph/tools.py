@@ -45,7 +45,7 @@ async def search_products(
                 if real_id:
                     masked_id = await IdMapper.get_index(thread_id, real_id, "p")
                     p["id"] = masked_id
-                    recent_products.append({"id": real_id, "name": p.get("name", "Unknown")})
+                    recent_products.append({"id": masked_id, "name": p.get("name", "Unknown")})
             
             if recent_products:
                 from app.memory.redis_store import RedisStore
@@ -397,9 +397,9 @@ async def rag_search_reviews(
                 if pid:
                     masked_pid = await IdMapper.get_index(thread_id, pid, "p")
                     r["product_id"] = masked_pid
-                    if pid not in seen:
-                        recent_products.append({"id": pid, "name": pname or "Unknown"})
-                        seen.add(pid)
+                    if masked_pid not in seen:
+                        recent_products.append({"id": masked_pid, "name": pname or "Unknown"})
+                        seen.add(masked_pid)
                         
                 # Replace review_id
                 if r.get("id"):

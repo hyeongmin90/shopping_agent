@@ -125,9 +125,12 @@ async def product_search_agent_tool(
     store = RedisStore()
     await store.initialize()
     ctx = await store.get_context(thread_id) or {}
+    filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
+    logger.info(f"Product search Agent context: {filtered_ctx}")
+    
     await store.close()
     
-    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
+    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await product_search_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
@@ -143,9 +146,10 @@ async def review_analysis_agent_tool(
     store = RedisStore()
     await store.initialize()
     ctx = await store.get_context(thread_id) or {}
+    filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
     await store.close()
     
-    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
+    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await review_analysis_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
@@ -161,9 +165,12 @@ async def cart_management_agent_tool(
     store = RedisStore()
     await store.initialize()
     ctx = await store.get_context(thread_id) or {}
+    filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
+    
+    logger.info(f"Cart management Agent context: {filtered_ctx}")
     await store.close()
     
-    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
+    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await cart_management_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
@@ -179,9 +186,10 @@ async def customer_service_agent_tool(
     store = RedisStore()
     await store.initialize()
     ctx = await store.get_context(thread_id) or {}
+    filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
     await store.close()
     
-    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
+    initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await customer_service_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
