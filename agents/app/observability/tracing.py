@@ -15,7 +15,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-def setup_tracing():
+def setup_tracing(app=None):
     """Configure OpenTelemetry distributed tracing."""
     resource = Resource.create(
         {
@@ -40,7 +40,11 @@ def setup_tracing():
     trace.set_tracer_provider(provider)
 
     # Auto-instrument FastAPI and HTTPX
-    FastAPIInstrumentor().instrument()
+    # if app:
+    #     FastAPIInstrumentor.instrument_app(app)
+    # else:
+    #     FastAPIInstrumentor().instrument()
+        
     HTTPXClientInstrumentor().instrument()
 
     logger.info("OpenTelemetry tracing initialized")
