@@ -112,10 +112,28 @@ async def run_agent(
     input_messages = [ctx_sys_msg, HumanMessage(content=message)]
 
     # thread_id 단위로 체크포인트 저장 / TTL은 saver.ttl로 제어할 수 있습니다.
+    callbacks = []
+    if getattr(settings, "LANGFUSE_SECRET_KEY", None) and getattr(settings, "LANGFUSE_PUBLIC_KEY", None):
+        import os
+        os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
+        os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
+        if getattr(settings, "LANGFUSE_HOST", None):
+            os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
+            
+        try:
+            from langfuse.langchain import CallbackHandler
+
+            # v3/v4+ 에서는 os.environ을 자동으로 읽으며, 키워드 인자가 필요 없습니다.
+            langfuse_handler = CallbackHandler()
+            callbacks.append(langfuse_handler)
+        except Exception as e:
+            logger.warning("Failed to initialize Langfuse callback", error=str(e))
+
     config = {
         "configurable": {
             "thread_id": thread_id,
-        }
+        },
+        "callbacks": callbacks
     }
 
     try:

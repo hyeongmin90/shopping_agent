@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "agent-service"
 
+    # Langfuse (Optional)
+    LANGFUSE_SECRET_KEY: str | None = None
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+    LANGFUSE_BASE_URL: str | None = None
+
     # RAG Service
     RAG_SERVICE_URL: str = "http://localhost:8002"
 

@@ -8,6 +8,7 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, InjectedState
+from langchain_core.runnables.config import RunnableConfig
 
 from app.config import settings
 from app.graph.tools import (
@@ -115,7 +116,8 @@ def _extract_final_response(state: SubAgentState) -> str:
 async def product_search_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
-    thread_id: Annotated[str, InjectedState("thread_id")]
+    thread_id: Annotated[str, InjectedState("thread_id")],
+    config: RunnableConfig
 ) -> str:
     """상품을 검색하고 재고를 확인하는 에이전트를 호출합니다. 사용자가 상품 추천, 검색, 조회를 원할 때 이 도구를 사용합니다."""
     # load context
@@ -126,14 +128,15 @@ async def product_search_agent_tool(
     await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
-    final_state = await product_search_graph.ainvoke(initial_state)
+    final_state = await product_search_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
 @tool
 async def review_analysis_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
-    thread_id: Annotated[str, InjectedState("thread_id")]
+    thread_id: Annotated[str, InjectedState("thread_id")],
+    config: RunnableConfig
 ) -> str:
     """상품의 리뷰, 평점, 사이즈 의견 등을 분석하는 에이전트를 호출합니다."""
     logger.info("Review analysis Agent called")
@@ -143,14 +146,15 @@ async def review_analysis_agent_tool(
     await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
-    final_state = await review_analysis_graph.ainvoke(initial_state)
+    final_state = await review_analysis_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
 @tool
 async def cart_management_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
-    thread_id: Annotated[str, InjectedState("thread_id")]
+    thread_id: Annotated[str, InjectedState("thread_id")],
+    config: RunnableConfig
 ) -> str:
     """사용자의 장바구니에 상품을 추가/삭제하거나 예산을 관리하는 에이전트를 호출합니다. 주문, 결제 기능은 지원하지 않습니다."""
     logger.info("Cart management Agent called")
@@ -160,14 +164,15 @@ async def cart_management_agent_tool(
     await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
-    final_state = await cart_management_graph.ainvoke(initial_state)
+    final_state = await cart_management_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
 @tool
 async def customer_service_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
-    thread_id: Annotated[str, InjectedState("thread_id")]
+    thread_id: Annotated[str, InjectedState("thread_id")],
+    config: RunnableConfig
 ) -> str:
     """주문 상태 조회, 환불/취소 절차 문의, 각종 쇼핑몰 정책 정보를 답변하는 CS 에이전트를 호출합니다."""
     logger.info("Customer service Agent called")
@@ -177,7 +182,7 @@ async def customer_service_agent_tool(
     await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": ctx}
-    final_state = await customer_service_graph.ainvoke(initial_state)
+    final_state = await customer_service_graph.ainvoke(initial_state, config)
     return _extract_final_response(final_state)
 
 AGENT_TOOLS = [

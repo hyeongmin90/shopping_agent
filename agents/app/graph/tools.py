@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from app.tools import service_clients as sc
-
+from app.graph.id_mapper import IdMapper
 
 import structlog
 
@@ -28,18 +28,7 @@ async def search_products(
     user_id: Annotated[str, InjectedState("user_id")] = None,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
-    """Search products in the store. Prices are in KRW (Korean Won).
-
-    Args:
-        keyword: Search keyword (product name, description)
-        category: Category name to filter
-        brand: Brand name to filter
-        min_price: Minimum price in KRW
-        max_price: Maximum price in KRW
-
-    Returns:
-        JSON string of matching products with their details
-    """
+    """Search products in the store. Prices are in KRW (Korean Won)."""
     try:
         result = await sc.search_products(
             keyword=keyword,
@@ -49,9 +38,15 @@ async def search_products(
             max_price=max_price,
         )
         
-        # Save recently shown products to redis context
         if user_id and thread_id and isinstance(result, dict) and "content" in result:
-            recent_products = [{"id": p["id"], "name": p["name"]} for p in result["content"]]
+            recent_products = []
+            for p in result["content"]:
+                real_id = p.get("id")
+                if real_id:
+                    masked_id = await IdMapper.get_index(thread_id, real_id, "p")
+                    p["id"] = masked_id
+                    recent_products.append({"id": real_id, "name": p.get("name", "Unknown")})
+            
             if recent_products:
                 from app.memory.redis_store import RedisStore
                 redis_store = RedisStore()
@@ -65,18 +60,20 @@ async def search_products(
 
 
 @tool
-async def get_product_details(product_id: str) -> str:
-    """Get detailed information about a specific product including variants.
-
-    Args:
-        product_id: UUID of the product
-
-    Returns:
-        JSON string with product details and available variants
-    """
+async def get_product_details(
+    product_id: str,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get detailed information about a specific product including variants."""
     try:
-        product = await sc.get_product(product_id)
-        variants = await sc.get_product_variants(product_id)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        product = await sc.get_product(real_product_id)
+        variants = await sc.get_product_variants(real_product_id)
+        
+        product = await IdMapper.replace_dict_keys(thread_id, product, {"id": "p"})
+        for i, v in enumerate(variants):
+            variants[i] = await IdMapper.replace_dict_keys(thread_id, v, {"id": "v", "product_id": "p"})
+            
         product["variants"] = variants
         return json.dumps(product, ensure_ascii=False)
     except Exception as e:
@@ -85,11 +82,7 @@ async def get_product_details(product_id: str) -> str:
 
 @tool
 async def get_categories() -> str:
-    """Get all available product categories.
-
-    Returns:
-        JSON string of category tree
-    """
+    """Get all available product categories."""
     try:
         result = await sc.get_categories()
         return json.dumps(result, ensure_ascii=False)
@@ -102,53 +95,54 @@ async def get_categories() -> str:
 # ============================================================
 
 @tool
-async def get_product_reviews(product_id: str, sort: str = "helpful") -> str:
-    """Get reviews for a specific product.
-
-    Args:
-        product_id: UUID of the product
-        sort: Sort order - 'helpful' (most helpful first), 'rating', 'date' (newest first)
-
-    Returns:
-        JSON string with reviews and pagination info
-    """
+async def get_product_reviews(
+    product_id: str, 
+    sort: str = "helpful",
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get reviews for a specific product."""
     try:
-        result = await sc.get_product_reviews(product_id, sort=sort)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        result = await sc.get_product_reviews(real_product_id, sort=sort)
+        
+        if isinstance(result, dict) and "content" in result:
+            for r in result["content"]:
+                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def get_review_summary(product_id: str) -> str:
-    """Get review summary including average rating and quality rating.
-
-    Args:
-        product_id: UUID of the product
-
-    Returns:
-        JSON with averageRating, totalReviews, ratingDistribution, averageQualityRating
-    """
+async def get_review_summary(
+    product_id: str,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get review summary including average rating and quality rating."""
     try:
-        result = await sc.get_review_summary(product_id)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        result = await sc.get_review_summary(real_product_id)
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def search_reviews(product_id: str, keyword: str) -> str:
-    """Search reviews for specific topics like sizing, quality, material, etc.
-
-    Args:
-        product_id: UUID of the product
-        keyword: Search keyword (e.g., '사이즈', '품질', '배송', '소재')
-
-    Returns:
-        JSON with matching reviews
-    """
+async def search_reviews(
+    product_id: str, 
+    keyword: str,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Search reviews for specific topics like sizing, quality, material, etc."""
     try:
-        result = await sc.search_reviews(product_id, keyword)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        result = await sc.search_reviews(real_product_id, keyword)
+        
+        if isinstance(result, dict) and "content" in result:
+            for r in result["content"]:
+                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -159,17 +153,22 @@ async def search_reviews(product_id: str, keyword: str) -> str:
 # ============================================================
 
 @tool
-async def get_cart(user_id: Annotated[str, InjectedState("user_id")]) -> str:
-    """Get current shopping cart details.
-
-    Args:
-        user_id: User's UUID
-
-    Returns:
-        JSON with cart details including items, total amount
-    """
+async def get_cart(
+    user_id: Annotated[str, InjectedState("user_id")],
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get current shopping cart details."""
     try:
         result = await sc.get_cart(user_id)
+        
+        if isinstance(result, dict) and "items" in result:
+            for item in result["items"]:
+                await IdMapper.replace_dict_keys(thread_id, item, {
+                    "id": "c",
+                    "product_id": "p",
+                    "variant_id": "v"
+                })
+        
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -181,97 +180,127 @@ async def add_to_cart(
     quantity: int,
     user_id: Annotated[str, InjectedState("user_id")],
     variant_id: Optional[str] = None,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
-    """Add a product to the shopping cart.
-
-    Args:
-        product_id: Product UUID to add
-        quantity: Number of items
-        variant_id: Optional variant UUID (for specific size/color)
-
-    Returns:
-        JSON with updated cart details
-    """
+    """Add a product to the shopping cart."""
     try:
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        real_variant_id = await IdMapper.get_real_id(thread_id, variant_id) if variant_id else None
+        
         result = await sc.add_cart_item(
-            user_id, product_id, variant_id, quantity
+            user_id, real_product_id, real_variant_id, quantity
         )
+        
+        # Usually returns updated cart
+        if isinstance(result, dict) and "items" in result:
+            for item in result["items"]:
+                await IdMapper.replace_dict_keys(thread_id, item, {
+                    "id": "c",
+                    "product_id": "p",
+                    "variant_id": "v"
+                })
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def remove_from_cart(item_id: str, user_id: Annotated[str, InjectedState("user_id")]) -> str:
-    """Remove an item from the shopping cart.
-
-    Args:
-        item_id: The cart item UUID to remove
-
-    Returns:
-        JSON with updated cart details
-    """
+async def remove_from_cart(
+    item_id: str, 
+    user_id: Annotated[str, InjectedState("user_id")],
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Remove an item from the shopping cart."""
     try:
-        result = await sc.remove_cart_item(user_id, item_id)
+        real_item_id = await IdMapper.get_real_id(thread_id, item_id)
+        result = await sc.remove_cart_item(user_id, real_item_id)
+        
+        if isinstance(result, dict) and "items" in result:
+            for item in result["items"]:
+                await IdMapper.replace_dict_keys(thread_id, item, {
+                    "id": "c",
+                    "product_id": "p",
+                    "variant_id": "v"
+                })
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def update_cart_item_quantity(item_id: str, product_id: str, quantity: int, user_id: Annotated[str, InjectedState("user_id")], variant_id: Optional[str] = None) -> str:
-    """Update quantity of an item in the cart.
-
-    Args:
-        item_id: The cart item UUID
-        product_id: The product UUID
-        quantity: New quantity
-        variant_id: Optional variant UUID
-
-    Returns:
-        JSON with updated cart details
-    """
+async def update_cart_item_quantity(
+    item_id: str, 
+    product_id: str, 
+    quantity: int, 
+    user_id: Annotated[str, InjectedState("user_id")],
+    variant_id: Optional[str] = None,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Update quantity of an item in the cart."""
     try:
-        result = await sc.update_cart_item(user_id, item_id, product_id, variant_id, quantity)
+        real_item_id = await IdMapper.get_real_id(thread_id, item_id)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        real_variant_id = await IdMapper.get_real_id(thread_id, variant_id) if variant_id else None
+        
+        result = await sc.update_cart_item(user_id, real_item_id, real_product_id, real_variant_id, quantity)
+        
+        if isinstance(result, dict) and "items" in result:
+            for item in result["items"]:
+                await IdMapper.replace_dict_keys(thread_id, item, {
+                    "id": "c",
+                    "product_id": "p",
+                    "variant_id": "v"
+                })
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def get_order_details(order_id: str) -> str:
-    """Get current order/cart details.
-
-    Args:
-        order_id: Order UUID
-
-    Returns:
-        JSON with order details including items, status, total
-    """
+async def get_order_details(
+    order_id: str,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get current order/cart details."""
     try:
-        result = await sc.get_order(order_id)
+        real_order_id = await IdMapper.get_real_id(thread_id, order_id)
+        result = await sc.get_order(real_order_id)
+        
+        if isinstance(result, dict):
+            await IdMapper.replace_dict_keys(thread_id, result, {"id": "o"})
+            if "items" in result:
+                for item in result["items"]:
+                    await IdMapper.replace_dict_keys(thread_id, item, {
+                        "id": "i",
+                        "product_id": "p",
+                        "variant_id": "v",
+                        "order_id": "o"
+                    })
+                    
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def get_user_orders(user_id: Annotated[str, InjectedState("user_id")]) -> str:
-    """Get all orders for a user (including past orders).
-
-    Args:
-        user_id: User UUID
-
-    Returns:
-        JSON list of orders
-    """
+async def get_user_orders(
+    user_id: Annotated[str, InjectedState("user_id")],
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get all orders for a user (including past orders)."""
     try:
         result = await sc.get_user_orders(user_id)
+        
+        if isinstance(result, list):
+            for order in result:
+                await IdMapper.replace_dict_keys(thread_id, order, {"id": "o"})
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
-
-
 
 
 # ============================================================
@@ -283,36 +312,36 @@ async def check_inventory(
     product_id: str,
     variant_id: str,
     quantity: int = 1,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
-    """Check if a product variant is in stock.
-
-    Args:
-        product_id: Product UUID
-        variant_id: Variant UUID
-        quantity: Desired quantity
-
-    Returns:
-        JSON with availability info
-    """
+    """Check if a product variant is in stock."""
     try:
-        result = await sc.check_inventory(product_id, variant_id, quantity)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        real_variant_id = await IdMapper.get_real_id(thread_id, variant_id)
+        
+        result = await sc.check_inventory(real_product_id, real_variant_id, quantity)
+        if isinstance(result, dict):
+            await IdMapper.replace_dict_keys(thread_id, result, {"product_id": "p", "variant_id": "v"})
+            
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 @tool
-async def get_product_stock(product_id: str) -> str:
-    """Get stock levels for all variants of a product.
-
-    Args:
-        product_id: Product UUID
-
-    Returns:
-        JSON list with stock info per variant
-    """
+async def get_product_stock(
+    product_id: str,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """Get stock levels for all variants of a product."""
     try:
-        result = await sc.get_product_inventory(product_id)
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        result = await sc.get_product_inventory(real_product_id)
+        
+        if isinstance(result, list):
+            for item in result:
+                await IdMapper.replace_dict_keys(thread_id, item, {"product_id": "p", "variant_id": "v"})
+                
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -333,11 +362,9 @@ ORDER_TOOLS = [
 INVENTORY_TOOLS = [check_inventory, get_product_stock]
 
 
-
 # ============================================================
 # RAG Tools (Hybrid Search)
 # ============================================================
-
 
 @tool
 async def rag_search_reviews(
@@ -348,40 +375,35 @@ async def rag_search_reviews(
     user_id: Annotated[str, InjectedState("user_id")] = None,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
-    """Search product reviews using semantic vector search.
-
-    Uses AI embeddings to understand the meaning behind review queries.
-    For example, '사이즈가 작나요?' will find reviews mentioning sizing issues
-    even without exact keyword matches. Ideal for nuanced questions about
-    product quality, comfort, durability, etc.
-
-    Args:
-        query: Natural language query about reviews (e.g., '여름에 시원한가요?', '내구성은 어떤가요?')
-        product_id: Optional product UUID to filter reviews for a specific product
-        min_rating: Optional minimum rating filter (1-5)
-        verified_only: If True, only return verified purchase reviews
-
-    Returns:
-        JSON string of semantically matching reviews with metadata
-    """
+    """Search product reviews using semantic vector search."""
     try:
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id) if product_id else None
+        
         results = await sc.rag_search_reviews_api(
             query=query,
-            product_id=product_id,
+            product_id=real_product_id,
             min_rating=min_rating,
             verified_only=verified_only,
         )
         
-        # Extract product references from review search and save to recent context
         if user_id and thread_id and isinstance(results, dict) and "results" in results:
             recent_products = []
             seen = set()
             for r in results["results"]:
                 pid = r.get("product_id")
                 pname = r.get("product_name")
-                if pid and pid not in seen:
-                    recent_products.append({"id": pid, "name": pname or "Unknown"})
-                    seen.add(pid)
+                
+                # Replace product_id
+                if pid:
+                    masked_pid = await IdMapper.get_index(thread_id, pid, "p")
+                    r["product_id"] = masked_pid
+                    if pid not in seen:
+                        recent_products.append({"id": pid, "name": pname or "Unknown"})
+                        seen.add(pid)
+                        
+                # Replace review_id
+                if r.get("id"):
+                    r["id"] = await IdMapper.get_index(thread_id, r["id"], "r")
             
             if recent_products:
                 from app.memory.redis_store import RedisStore
@@ -389,7 +411,6 @@ async def rag_search_reviews(
                 await redis_store.initialize()
                 await redis_store.update_context(thread_id, {"recent_products": recent_products})
                 await redis_store.close()
-                
 
         return json.dumps(results, ensure_ascii=False)
     except Exception as e:
@@ -401,19 +422,7 @@ async def rag_search_policies(
     query: str,
     category: Optional[str] = None,
 ) -> str:
-    """Search store policies using balanced hybrid search (keyword + semantic).
-
-    Searches refund policies, shipping policies, terms of service, privacy policy,
-    membership benefits, warranty information, and customer service guidelines.
-    Combines exact term matching with semantic understanding for best results.
-
-    Args:
-        query: Policy question (e.g., '환불 기한이 어떻게 되나요?', '배송비 무료 조건')
-        category: Optional policy category filter (e.g., 'refund', 'shipping', 'terms')
-
-    Returns:
-        JSON string of matching policy documents
-    """
+    """Search store policies using balanced hybrid search (keyword + semantic)."""
     try:
         results = await sc.rag_search_policies_api(
             query=query,
