@@ -66,7 +66,7 @@ async def _request(
 # ============================================================
 
 async def search_products(
-    keyword: Optional[str] = None,
+    search: Optional[str] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
     min_price: Optional[int] = None,
@@ -76,8 +76,8 @@ async def search_products(
 ) -> dict:
     """Search products with filters."""
     params = {"page": page, "size": size}
-    if keyword:
-        params["keyword"] = keyword
+    if search:
+        params["search"] = search
     if category:
         params["category"] = category
     if brand:

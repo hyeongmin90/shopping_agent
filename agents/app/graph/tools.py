@@ -20,7 +20,7 @@ logger = structlog.get_logger()
 
 @tool
 async def search_products(
-    keyword: Optional[str] = None,
+    search: Optional[str] = None,
     category: Optional[str] = None,
     brand: Optional[str] = None,
     min_price: Optional[int] = None,
@@ -28,10 +28,22 @@ async def search_products(
     user_id: Annotated[str, InjectedState("user_id")] = None,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
-    """Search products in the store. Prices are in KRW (Korean Won)."""
+    """
+    Search products in the store. Prices are in KRW (Korean Won).
+    
+    Args:
+        search: 검색어
+        category: 카테고리
+        brand: 브랜드
+        min_price: 최소 가격
+        max_price: 최대 가격
+    
+    Returns:
+        JSON 형식의 검색 결과
+    """
     try:
         result = await sc.search_products(
-            keyword=keyword,
+            search=search,
             category=category,
             brand=brand,
             min_price=min_price,
