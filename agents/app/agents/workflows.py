@@ -74,7 +74,7 @@ def build_sub_agent_graph(name: str, tools: list, system_prompt: str):
 # -------------------------------------------------------------
 product_search_graph = build_sub_agent_graph(
     "product_search", 
-    PRODUCT_TOOLS + INVENTORY_TOOLS, 
+    PRODUCT_TOOLS, 
     get_agent_prompt("product_search")
 )
 
@@ -92,7 +92,7 @@ cart_enhanced_prompt = cart_base_prompt + """
 
 cart_management_graph = build_sub_agent_graph(
     "cart_management", 
-    CART_TOOLS + PRODUCT_TOOLS + INVENTORY_TOOLS, 
+    CART_TOOLS + PRODUCT_TOOLS, 
     cart_enhanced_prompt
 )
 
@@ -119,7 +119,7 @@ async def product_search_agent_tool(
     thread_id: Annotated[str, InjectedState("thread_id")],
     config: RunnableConfig
 ) -> str:
-    """상품을 검색하고 재고를 확인하는 에이전트를 호출합니다. 사용자가 상품 추천, 검색, 조회를 원할 때 이 도구를 사용합니다."""
+    """상품을 검색하는 에이전트를 호출합니다. 사용자가 상품 추천, 검색, 조회를 원할 때 이 도구를 사용합니다."""
     # load context
     logger.info("Product search Agent called")
     store = RedisStore()

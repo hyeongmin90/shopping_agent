@@ -21,13 +21,12 @@ logger = structlog.get_logger()
 # 이 시간이 지나면 Redis TTL에 의해 체크포인트가 자동 삭제되어 대화가 초기화됩니다.
 CONVERSATION_TTL = int(getattr(settings, "CONVERSATION_TTL", 3600))
 
-
 SUPERVISOR_PROMPT = """당신은 지능형 쇼핑 에이전트 시스템의 메인 슈퍼바이저입니다.
 
 당신은 사용자 요청을 해결하기 위해 여러 전문화된 하위 에이전트를 도구(Tool)로 사용할 수 있습니다.
 
 사용할 수 있는 전문 에이전트 도구:
-1. product_search_agent_tool: 상품 검색, 가격 비교, 카테고리 탐색, 재고 확인을 수행합니다.
+1. product_search_agent_tool: 상품 검색, 가격 비교, 카테고리 탐색을 수행합니다.
 2. review_analysis_agent_tool: 상품 리뷰 요약, 사이즈/품질 의견 분석을 수행합니다.
 3. cart_management_agent_tool: 장바구니에 특정 상품 추가/삭제, 예산 관리를 수행합니다.
 4. customer_service_agent_tool: 기존 주문 내역 조회, 반품/환불 절차 안내, 쇼핑몰 정책(배송, 약관) 안내를 수행합니다.
@@ -79,8 +78,9 @@ def supervisor_agent(checkpointer: AsyncRedisSaver):
 async def create_redis_checkpointer():
     """AsyncRedisSaver를 생성하고 필요한 인덱스를 세팅한 뒤 반환합니다."""
     async with AsyncRedisSaver.from_conn_string(settings.REDIS_URL) as saver:
+        saver.ttl = CONVERSATION_TTL
         await saver.asetup()
-        logger.info("Redis checkpointer initialized")
+        logger.info(f"Redis checkpointer initialized with TTL: {CONVERSATION_TTL}s")
         yield saver
 
 
@@ -103,13 +103,14 @@ async def run_agent(
     """
 
     # 세션 컨텍스트(최근 상품, 예산 등)를 시스템 보조 메시지로 삽입
-    ctx_str = json.dumps(context, ensure_ascii=False)
-    ctx_sys_msg = SystemMessage(
-        content=f"[시스템] 현재 사용자 세션 상태 (사용자에게 노출하지 마세요):\n{ctx_str}"
-    )
+    # ctx_str = json.dumps(context, ensure_ascii=False)
+    # ctx_sys_msg = SystemMessage(
+    #     content=f"[시스템] 현재 사용자 세션 상태 (사용자에게 노출하지 마세요):\n{ctx_str}"
+    # )
 
     # 에이전트에 전달하는 새 메시지만 넣으면, 체크포인터가 자동으로 이전 이력을 붙여줍니다.
-    input_messages = [ctx_sys_msg, HumanMessage(content=message)]
+    # input_messages = [ctx_sys_msg, HumanMessage(content=message)]
+    input_messages = [HumanMessage(content=message)]
 
     # thread_id 단위로 체크포인트 저장 / TTL은 saver.ttl로 제어할 수 있습니다.
     callbacks = []
