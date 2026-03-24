@@ -12,9 +12,7 @@ from langchain_core.runnables.config import RunnableConfig
 
 from app.config import settings
 from app.graph.tools import (
-    PRODUCT_TOOLS, REVIEW_TOOLS, CART_TOOLS,
-    ORDER_TOOLS, INVENTORY_TOOLS,
-    RAG_REVIEW_TOOLS, RAG_POLICY_TOOLS,
+    SEARCH_AGENT_TOOLS, REVIEW_AGENT_TOOLS, CART_AGENT_TOOLS, CUSTOMER_SERVICE_AGENT_TOOLS
 )
 from app.agents.specialized import get_agent_prompt, _get_llm
 from app.memory.redis_store import RedisStore
@@ -37,7 +35,7 @@ class SubAgentState(TypedDict):
 # -------------------------------------------------------------
 def build_sub_agent_graph(name: str, tools: list, system_prompt: str):
     """Builds a generic sub-agent workflow using ToolNode."""
-    llm = _get_llm()
+    llm = _get_llm(model=settings.OPENAI_SUB_AGENT_MODEL)
     if tools:
         llm_with_tools = llm.bind_tools(tools)
     else:
@@ -74,13 +72,13 @@ def build_sub_agent_graph(name: str, tools: list, system_prompt: str):
 # -------------------------------------------------------------
 product_search_graph = build_sub_agent_graph(
     "product_search", 
-    PRODUCT_TOOLS, 
+    SEARCH_AGENT_TOOLS, 
     get_agent_prompt("product_search")
 )
 
 review_analysis_graph = build_sub_agent_graph(
     "review_analysis", 
-    REVIEW_TOOLS + PRODUCT_TOOLS + RAG_REVIEW_TOOLS, 
+    REVIEW_AGENT_TOOLS, 
     get_agent_prompt("review_analysis")
 )
 
@@ -92,13 +90,13 @@ cart_enhanced_prompt = cart_base_prompt + """
 
 cart_management_graph = build_sub_agent_graph(
     "cart_management", 
-    CART_TOOLS + PRODUCT_TOOLS, 
+    CART_AGENT_TOOLS, 
     cart_enhanced_prompt
 )
 
 customer_service_graph = build_sub_agent_graph(
     "customer_service", 
-    ORDER_TOOLS + PRODUCT_TOOLS + RAG_POLICY_TOOLS, 
+    CUSTOMER_SERVICE_AGENT_TOOLS, 
     get_agent_prompt("customer_service")
 )
 

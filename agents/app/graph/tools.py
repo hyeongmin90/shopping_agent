@@ -202,6 +202,11 @@ async def add_to_cart(
         result = await sc.add_cart_item(
             user_id, real_product_id, real_variant_id, quantity
         )
+
+        logger.info("ID Mapping")
+        logger.info(f"id: {product_id}, real_id: {real_product_id}")
+        logger.info(f"variant_id: {variant_id}, real_variant_id: {real_variant_id}")
+        logger.info(f"Cart item added: {result}")
         
         # Usually returns updated cart
         if isinstance(result, dict) and "items" in result:
@@ -358,22 +363,6 @@ async def get_product_stock(
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-
-# ============================================================
-# Tool Groups
-# ============================================================
-
-PRODUCT_TOOLS = [search_products, get_product_details, get_categories]
-REVIEW_TOOLS = [get_product_reviews, get_review_summary, search_reviews]
-CART_TOOLS = [
-    get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity,
-]
-ORDER_TOOLS = [
-    get_order_details, get_user_orders,
-]
-INVENTORY_TOOLS = [check_inventory, get_product_stock]
-
-
 # ============================================================
 # RAG Tools (Hybrid Search)
 # ============================================================
@@ -443,12 +432,15 @@ async def rag_search_policies(
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+# ============================================================
+# Tool Groups   
+# ============================================================
 
-# RAG Tool Groups
-RAG_REVIEW_TOOLS = [rag_search_reviews]
-RAG_POLICY_TOOLS = [rag_search_policies]
+SEARCH_AGENT_TOOLS = [search_products, get_product_details, get_categories]
+REVIEW_AGENT_TOOLS = [get_product_reviews, get_review_summary, search_reviews, rag_search_reviews]
+CART_AGENT_TOOLS = [get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity]
+CUSTOMER_SERVICE_AGENT_TOOLS = [get_order_details, get_user_orders, rag_search_policies]
 
 ALL_TOOLS = (
-    PRODUCT_TOOLS + REVIEW_TOOLS + CART_TOOLS + ORDER_TOOLS + INVENTORY_TOOLS
-    + RAG_REVIEW_TOOLS + RAG_POLICY_TOOLS
+    SEARCH_AGENT_TOOLS + REVIEW_AGENT_TOOLS + CART_AGENT_TOOLS + CUSTOMER_SERVICE_AGENT_TOOLS
 )

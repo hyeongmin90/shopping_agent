@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     # OpenAI
 
     OPENAI_API_KEY: str = "sk-mock-your-api-key"
-    OPENAI_MODEL: str = "gpt-5-mini"
+    OPENAI_SUPERVISOR_MODEL: str = "gpt-5-mini"
+    OPENAI_SUB_AGENT_MODEL: str = "gpt-4o-mini"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSION: int = 1536
 
