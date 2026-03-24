@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.observability.tracing import setup_tracing
 from app.memory.redis_store import RedisStore
+from app.memory.pg_user_store import PgUserStore
 from app.graph.supervisor import supervisor_agent, create_redis_checkpointer
 
 from dotenv import load_dotenv
@@ -28,6 +29,11 @@ async def lifespan(app: FastAPI):
     await redis_store.initialize()
     app.state.redis = redis_store
 
+    # Initialize PostgreSQL user memory store (agent_db, shared with RAG service)
+    pg_store = PgUserStore()
+    await pg_store.initialize()
+    app.state.pg_store = pg_store
+
     # Create Redis checkpointer and supervisor agent
     async with create_redis_checkpointer() as checkpointer:
         app.state.checkpointer = checkpointer
@@ -45,6 +51,7 @@ async def lifespan(app: FastAPI):
     # Cleanup
     logger.info("Shutting down Shopping Agent Service...")
     await redis_store.close()
+    await pg_store.close()
     logger.info("Shopping Agent Service stopped")
 
 

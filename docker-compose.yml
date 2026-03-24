@@ -218,6 +218,7 @@ services:
       - "5437:5432"
     volumes:
       - postgres-agent-data:/var/lib/postgresql/data
+      - ./tools/seed/postgres/agent-init.sql:/docker-entrypoint-initdb.d/01-init.sql
     networks:
       - shopping-net
     healthcheck:

@@ -32,47 +32,6 @@ async def get_pool() -> asyncpg.Pool:
     return _pool
 
 
-async def ensure_tables() -> None:
-    """Create pgvector extension and tables if they don't already exist."""
-    pool = await get_pool()
-    dimension = settings.OPENAI_EMBEDDING_DIMENSION
-
-    tables_config = {
-        settings.POSTGRES_PRODUCT_TABLE: "Product descriptions and details for semantic search",
-        settings.POSTGRES_REVIEW_TABLE: "Product reviews for semantic search",
-        settings.POSTGRES_POLICY_TABLE: "Shopping policies (refund, terms, shipping, etc.)",
-    }
-
-    async with pool.acquire() as conn:
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-
-        for table_name, description in tables_config.items():
-            await conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {table_name} (
-                    id VARCHAR PRIMARY KEY,
-                    embedding vector({dimension}),
-                    metadata JSONB,
-                    fts tsvector
-                );
-            """)
-           
-            await conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_embedding_idx 
-                ON {table_name} USING hnsw (embedding vector_cosine_ops);
-            """)
-            
-            await conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_metadata_idx 
-                ON {table_name} USING gin (metadata);
-            """)
-
-            await conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_fts_idx 
-                ON {table_name} USING gin (fts);
-            """)
-
-            logger.info("pgvector_table_ensured", table=table_name, description=description)
-
 
 async def upsert_vectors(
     table_name: str,
@@ -244,22 +203,3 @@ async def keyword_search(
         for record in records
     ]
 
-async def setup_connection(conn):
-    await register_vector(conn)
-
-async def _init_pool_with_setup():
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(
-            settings.POSTGRES_AGENT_URL,
-            min_size=1,
-            max_size=10,
-            setup=setup_connection
-        )
-        logger.info(
-            "pgvector_pool_initialized",
-            url=settings.POSTGRES_AGENT_URL.split("@")[1] if "@" in settings.POSTGRES_AGENT_URL else "localhost",
-        )
-    return _pool
-
-get_pool.__code__ = _init_pool_with_setup.__code__

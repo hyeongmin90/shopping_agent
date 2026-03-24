@@ -33,6 +33,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 .env
 *.egg-info/
 dist/
@@ -55,3 +56,6 @@ postgres-*-data/
 
 # Sisyphus
 .sisyphus/
+
+# Claude
+.claude/

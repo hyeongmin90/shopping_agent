@@ -6,7 +6,6 @@ import structlog
 
 from app.api import rag_router
 from app.rag.pipeline import EmbeddingPipeline
-from app.rag.pgvector_store import ensure_tables
 
 logger = structlog.get_logger()
 pipeline = EmbeddingPipeline()
@@ -14,9 +13,6 @@ pipeline = EmbeddingPipeline()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("rag_service_starting")
-    # Initialize pgvector tables first 
-    await ensure_tables()
-    
     # Start Kafka pipeline
     pipeline.initialize()
     await pipeline.start()

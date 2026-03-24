@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # RAG Service
     RAG_SERVICE_URL: str = "http://localhost:8002"
 
+    # PostgreSQL (agent_db - shared with RAG service)
+    POSTGRES_AGENT_URL: str = "postgresql://agent_user:agent_pass@localhost:5437/agent_db"
+
     # Agent settings
     MAX_AGENT_ITERATIONS: int = 15
     APPROVAL_TIMEOUT_SECONDS: int = 300  # 5 minutes

@@ -47,6 +47,7 @@ async def chat(request: Request, body: ChatRequest):
 
     try:
         redis_store: RedisStore = request.app.state.redis
+        pg_store = getattr(request.app.state, "pg_store", None)
 
         # Load existing context (product memory, budget hints, etc.)
         context = await redis_store.get_context(thread_id) or {}
@@ -60,6 +61,7 @@ async def chat(request: Request, body: ChatRequest):
             user_id=body.user_id,
             context=context,
             redis_store=redis_store,
+            pg_store=pg_store,
         )
 
         # Persist any context updates (e.g. recent_products from search)
