@@ -1,5 +1,6 @@
 """LangGraph tool definitions wrapping backend service calls and RAG searches."""
 
+import asyncio
 import json
 from typing import Optional, Annotated
 
@@ -30,47 +31,56 @@ async def search_products(
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
     ctx: Annotated[dict, InjectedState("context")] = None,
 ) -> str:
-    """
-    상품을 검색합니다. 
-    
+    """상품을 검색합니다. 키워드 검색과 의미 검색을 동시에 수행해 결과를 합칩니다.
+
     Args:
-        search: 검색어 (정확한 상품명이 아니면 결과가 나오지 않으니, 되도록 카테고리나 브랜드로 검색하세요)
+        search: 검색어 (자연어 가능, 예: "따뜻한 겨울 아우터", "가성비 운동화")
         category: 카테고리 (get_categories()로 확인하세요)
         brand: 브랜드
         min_price: 최소 가격
         max_price: 최대 가격
-    
-    Returns:
-        JSON 형식의 검색 결과
     """
     try:
-        result = await sc.search_products(
-            search=search,
-            category=category,
-            brand=brand,
-            min_price=min_price,
-            max_price=max_price,
-        )
-        
-        if user_id and thread_id and isinstance(result, dict) and "content" in result:
-            recent_products = []
-            for p in result["content"]:
+        # FTS와 RAG를 병렬 실행 (search 없으면 RAG 스킵)
+        tasks = [sc.search_products(search=search, category=category, brand=brand,
+                                    min_price=min_price, max_price=max_price)]
+        if search:
+            tasks.append(sc.rag_search_products_api(query=search))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        fts_result = results[0] if not isinstance(results[0], Exception) else {}
+        rag_result = results[1] if len(results) > 1 and not isinstance(results[1], Exception) else []
+
+        # FTS 결과에서 제품 목록 추출
+        fts_items = fts_result.get("content", []) if isinstance(fts_result, dict) else []
+
+        # 중복 제거: FTS 우선, RAG는 FTS에 없는 것만 추가
+        seen_ids: set[str] = {p.get("id") for p in fts_items if p.get("id")}
+        rag_only = [p for p in (rag_result if isinstance(rag_result, list) else [])
+                    if p.get("id") not in seen_ids]
+
+        merged = fts_items + rag_only
+
+        # ID 마스킹 및 context 업데이트
+        recent_products = []
+        if user_id and thread_id:
+            for p in merged:
                 real_id = p.get("id")
                 if real_id:
                     masked_id = await IdMapper.get_index(thread_id, real_id, "p")
                     p["id"] = masked_id
                     recent_products.append({"id": masked_id, "name": p.get("name", "Unknown")})
-            
+
             if recent_products:
                 if ctx is not None:
                     ctx["recent_products"] = recent_products
-                    
+
                 redis_store = RedisStore()
                 await redis_store.initialize()
                 await redis_store.update_context(thread_id, {"recent_products": recent_products})
                 await redis_store.close()
 
-        return json.dumps(result, ensure_ascii=False)
+        return json.dumps({"content": merged, "total": len(merged)}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
 

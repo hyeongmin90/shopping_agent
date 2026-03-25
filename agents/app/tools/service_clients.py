@@ -313,6 +313,16 @@ async def get_product_inventory(product_id: str) -> list:
 # ============================================================
 
 
+async def rag_search_products_api(query: str, limit: int = 10) -> list:
+    """Search products using RAG service (semantic vector search)."""
+    return await _request(
+        "GET",
+        f"{settings.RAG_SERVICE_URL}/api/rag/products",
+        "rag-service",
+        params={"query": query, "limit": limit},
+    )
+
+
 async def rag_search_reviews_api(
 
     query: str,
