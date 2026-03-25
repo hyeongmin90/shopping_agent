@@ -22,9 +22,9 @@ class Settings(BaseSettings):
 
     # Vector DB (PostgreSQL pgvector)
     POSTGRES_AGENT_URL: str = "postgresql://agent_user:agent_pass@localhost:5437/agent_db"
-    POSTGRES_PRODUCT_TABLE: str = "products"
-    POSTGRES_REVIEW_TABLE: str = "reviews"
-    POSTGRES_POLICY_TABLE: str = "policies"
+    POSTGRES_PRODUCT_TABLE: str = "product_vectors"
+    POSTGRES_REVIEW_TABLE: str = "review_vectors"
+    POSTGRES_POLICY_TABLE: str = "policy_vectors"
 
     class Config:
         env_file = ".env"

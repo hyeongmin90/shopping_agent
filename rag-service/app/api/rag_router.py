@@ -10,6 +10,7 @@ from app.rag.pgvector_store import upsert_vectors
 
 from app.rag.review_rag import search_reviews_rag
 from app.rag.policy_rag import search_policies_rag
+from app.rag.product_rag import search_products_rag
 
 
 logger = structlog.get_logger()
@@ -23,6 +24,14 @@ class PolicyIngestRequest(BaseModel):
     effective_date: Optional[str] = None
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
+
+@router.get("/products", response_model=List[Dict[str, Any]])
+async def api_search_products(
+    query: str,
+    limit: int = Query(10, ge=1, le=50)
+):
+    return await search_products_rag(query=query, limit=limit)
+
 
 @router.get("/reviews", response_model=List[Dict[str, Any]])
 async def api_search_reviews(

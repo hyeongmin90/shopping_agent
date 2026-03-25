@@ -19,6 +19,8 @@ from app.rag.pgvector_store import upsert_vectors
 logger = structlog.get_logger()
 
 REVIEW_CREATED_EVENT = "ReviewCreatedEvent"
+PRODUCT_CREATED_EVENT = "ProductCreatedEvent"
+PRODUCT_UPDATED_EVENT = "ProductUpdatedEvent"
 
 
 class EmbeddingPipeline:
@@ -39,7 +41,7 @@ class EmbeddingPipeline:
             "max.poll.interval.ms": 300000,
         }
         consumer = Consumer(consumer_config)
-        consumer.subscribe(["review.events"])
+        consumer.subscribe(["review.events", "product.events"])
         self._consumer = consumer
         logger.info(
             "embedding_pipeline_initialized",
@@ -128,11 +130,64 @@ class EmbeddingPipeline:
 
         if event_type == REVIEW_CREATED_EVENT:
             await self._handle_review_event(data)
+        elif event_type in (PRODUCT_CREATED_EVENT, PRODUCT_UPDATED_EVENT):
+            await self._handle_product_event(data)
         else:
             logger.debug(
                 "embedding_pipeline_event_skipped",
                 event_type=event_type,
             )
+
+    async def _handle_product_event(self, data: dict[str, Any]) -> None:
+        """Embed and store a product in PostgreSQL."""
+        product_id = data.get("productId", data.get("product_id", ""))
+        name = data.get("name", "")
+        description = data.get("description", "")
+        brand = data.get("brand", "")
+        category_name = data.get("categoryName", data.get("category_name", ""))
+        base_price = data.get("basePrice", data.get("base_price"))
+        currency = data.get("currency", "KRW")
+        status = data.get("status", "")
+
+        if not product_id or not name:
+            logger.warning("embedding_pipeline_product_missing_fields", data=data)
+            return
+
+        embed_text = " ".join(filter(None, [name, brand, category_name, description]))
+
+        try:
+            vector = await generate_embedding(embed_text)
+
+            payload = {
+                "product_id": product_id,
+                "name": name,
+                "description": description,
+                "brand": brand,
+                "category_name": category_name,
+                "base_price": base_price,
+                "currency": currency,
+                "status": status,
+            }
+            await upsert_vectors(
+                table_name=settings.POSTGRES_PRODUCT_TABLE,
+                ids=[product_id],
+                vectors=[vector],
+                payloads=[payload],
+                search_texts=[embed_text],
+            )
+
+            logger.info(
+                "embedding_pipeline_product_indexed",
+                product_id=product_id,
+                name=name,
+            )
+        except Exception as e:
+            logger.error(
+                "embedding_pipeline_product_error",
+                product_id=product_id,
+                error=str(e),
+            )
+            raise
 
     async def _handle_review_event(self, data: dict[str, Any]) -> None:
         """Embed and store a review in PostgreSQL."""
