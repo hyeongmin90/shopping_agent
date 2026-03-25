@@ -160,6 +160,16 @@ async def search_reviews(product_id: str, keyword: str) -> dict:
     )
 
 
+async def get_recent_reviews(product_id: str, limit: int = 5) -> list:
+    """Get recent reviews for a product."""
+    return await _request(
+        "GET",
+        f"{settings.REVIEW_SERVICE_URL}/api/reviews/product/{product_id}/recent",
+        "review-service",
+        params={"limit": limit},
+    )
+
+
 # ============================================================
 # Order Service Tools
 # ============================================================

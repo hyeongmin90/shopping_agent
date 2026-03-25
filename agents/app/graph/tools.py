@@ -146,7 +146,7 @@ async def get_review_summary(
 
 @tool
 async def search_reviews(
-    product_id: str, 
+    product_id: str,
     keyword: str,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
@@ -154,11 +154,36 @@ async def search_reviews(
     try:
         real_product_id = await IdMapper.get_real_id(thread_id, product_id)
         result = await sc.search_reviews(real_product_id, keyword)
-        
+
         if isinstance(result, dict) and "content" in result:
             for r in result["content"]:
                 await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
-                
+
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@tool
+async def get_recent_reviews(
+    product_id: str,
+    limit: int = 5,
+    thread_id: Annotated[str, InjectedState("thread_id")] = None,
+) -> str:
+    """특정 상품의 최근 리뷰를 가져옵니다.
+
+    Args:
+        product_id: 상품 ID
+        limit: 가져올 리뷰 수 (기본값 5, 최대 20)
+    """
+    try:
+        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        result = await sc.get_recent_reviews(real_product_id, limit)
+
+        if isinstance(result, list):
+            for r in result:
+                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -445,7 +470,7 @@ async def rag_search_policies(
 # ============================================================
 
 SEARCH_AGENT_TOOLS = [search_products, get_product_details, get_categories]
-REVIEW_AGENT_TOOLS = [get_product_reviews, get_review_summary, search_reviews, rag_search_reviews]
+REVIEW_AGENT_TOOLS = [get_product_reviews, get_review_summary, search_reviews, get_recent_reviews, rag_search_reviews]
 CART_AGENT_TOOLS = [get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity]
 CUSTOMER_SERVICE_AGENT_TOOLS = [get_order_details, get_user_orders, rag_search_policies]
 
