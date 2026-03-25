@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.graph.supervisor import run_agent
 from app.memory.redis_store import RedisStore
+from app.memory.pg_user_store import Context
 
 import structlog
 
@@ -47,11 +48,11 @@ async def chat(request: Request, body: ChatRequest):
 
     try:
         redis_store: RedisStore = request.app.state.redis
-        pg_store = getattr(request.app.state, "pg_store", None)
 
         # Load existing context (product memory, budget hints, etc.)
-        context = await redis_store.get_context(thread_id) or {}
-        context["user_id"] = body.user_id
+        state_context = await redis_store.get_context(thread_id) or {}
+        state_context["user_id"] = body.user_id
+        user_ctx = Context(user_id=body.user_id)
 
         # Run agent - conversation history is managed inside run_agent via Redis
         result = await run_agent(
@@ -59,9 +60,9 @@ async def chat(request: Request, body: ChatRequest):
             message=body.message,
             thread_id=thread_id,
             user_id=body.user_id,
-            context=context,
+            context=state_context,
+            user_ctx=user_ctx,
             redis_store=redis_store,
-            pg_store=pg_store,
         )
 
         # Persist any context updates (e.g. recent_products from search)

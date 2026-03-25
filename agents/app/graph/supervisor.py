@@ -1,18 +1,18 @@
 """Supervisor agent - langchain.agents.create_agent + Redis checkpointer for persistent memory."""
 
-import json
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from langchain.agents import create_agent, AgentState
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.redis import AsyncRedisSaver
+from langgraph.store.postgres import PostgresStore
 
 from app.agents.workflows import AGENT_TOOLS
 from app.config import settings
 from app.memory.redis_store import RedisStore
-from app.memory.pg_user_store import PgUserStore
+from app.memory.pg_user_store import Context, USER_PROFILE_TOOLS, inject_user_preferences
 
 import structlog
 
@@ -55,23 +55,21 @@ class ShoppingAgentState(AgentState):
 # Agent factory
 # ---------------------------------------------------------------------------
 
-def supervisor_agent(checkpointer: AsyncRedisSaver):
-    """Create the supervisor agent with a Redis checkpointer.
-
-    `checkpointer`는 애플리케이션 시작 시 lifespan 안에서 생성되어 주입됩니다.
-    LangGraph가 thread_id 단위로 체크포인트를 자동 관리하므로,
-    별도의 메시지 직렬화 코드 없이 대화 이력이 유지됩니다.
-    """
+def supervisor_agent(checkpointer: AsyncRedisSaver, store: PostgresStore):
+    """Create the supervisor agent with a Redis checkpointer and PostgresStore."""
     llm = ChatOpenAI(model=settings.OPENAI_SUPERVISOR_MODEL)
 
     agent = create_agent(
         model=llm,
-        tools=AGENT_TOOLS,
+        tools=AGENT_TOOLS + USER_PROFILE_TOOLS,
         system_prompt=SUPERVISOR_PROMPT,
         state_schema=ShoppingAgentState,
         checkpointer=checkpointer,
+        store=store,
+        context_schema=Context,
+        middleware=[inject_user_preferences],
     )
-    logger.info("Supervisor agent created with AsyncRedisSaver checkpointer")
+    logger.info("Supervisor agent created with AsyncRedisSaver checkpointer and PostgresStore")
     return agent
 
 
@@ -89,101 +87,20 @@ async def create_redis_checkpointer():
         yield saver
 
 
-# ---------------------------------------------------------------------------
-# Run helper
-# ---------------------------------------------------------------------------
-
-_MEMORY_EXTRACTION_PROMPT = """다음 대화에서 사용자에 대해 새롭게 알게 된 정보를 JSON으로 추출하세요.
-추출할 정보가 없으면 빈 값을 반환하세요.
-
-반환 형식 (JSON만 반환, 설명 없이):
-{
-  "preferences": {
-    "brands": ["삼성", "애플"],         // 언급된 선호 브랜드 (없으면 빈 배열)
-    "categories": ["노트북"],           // 관심 카테고리 (없으면 빈 배열)
-    "price_range": {"min": 0, "max": 1500000},  // 예산 범위 (언급 없으면 null)
-    "priorities": ["가성비", "경량"]    // 구매 우선순위 키워드 (없으면 빈 배열)
-  },
-  "facts": [],   // 사용자가 명시적으로 언급한 사실 (직업, 보유 기기, 상황 등). 예: ["대학원생", "맥북 에어 M3 보유 중"]
-  "summary": "" // 이번 대화로 파악된 사용자 특성 1~2문장 요약. 변화가 없으면 빈 문자열.
-}
-
-대화:
-{conversation}"""
-
-
-async def _extract_memories(
-    user_message: str,
-    ai_response: str,
-    pg_store: PgUserStore,
-    user_id: str,
-) -> None:
-    """대화에서 사용자 메모리를 추출하여 PostgreSQL에 저장합니다."""
-    conversation = f"사용자: {user_message}\n에이전트: {ai_response}"
-    prompt = _MEMORY_EXTRACTION_PROMPT.format(conversation=conversation)
-
-    try:
-        llm = ChatOpenAI(model=settings.OPENAI_SUB_AGENT_MODEL, temperature=0)
-        result = await llm.ainvoke([HumanMessage(content=prompt)])
-        raw = result.content.strip()
-
-        # JSON 파싱
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        extracted = json.loads(raw.strip())
-
-        prefs = extracted.get("preferences", {})
-        # 빈 값 정리
-        if prefs.get("price_range") is None:
-            prefs.pop("price_range", None)
-        prefs = {k: v for k, v in prefs.items() if v}
-
-        new_facts = [f for f in extracted.get("facts", []) if f]
-        summary = extracted.get("summary", "").strip()
-
-        if prefs or new_facts or summary:
-            await pg_store.upsert_profile(
-                user_id=user_id,
-                preferences=prefs or None,
-                new_facts=new_facts or None,
-                summary=summary or None,
-            )
-            logger.info("memory_extracted_and_saved", user_id=user_id)
-
-    except Exception as e:
-        # 메모리 추출 실패는 전체 대화에 영향 없이 무시
-        logger.warning("memory_extraction_failed", user_id=user_id, error=str(e))
-
-
 async def run_agent(
     agent,
     message: str,
     thread_id: str,
     user_id: str,
     context: dict,
+    user_ctx: Context,
     redis_store: RedisStore,
-    pg_store: PgUserStore | None = None,
 ) -> dict:
     """Invoke the supervisor agent.
 
     체크포인터가 thread_id 기준으로 대화 이력을 자동으로 저장/복원합니다.
-    pg_store가 있으면 user_id 기준 장기 메모리를 프롬프트에 주입하고,
-    대화 후 새 메모리를 추출하여 저장합니다.
     """
     input_messages: list = []
-
-    # 장기 메모리 로드 → 시스템 메시지로 주입
-    if pg_store and user_id:
-        try:
-            profile = await pg_store.get_profile(user_id)
-            if profile:
-                memory_text = pg_store.build_memory_prompt(profile)
-                input_messages.append(SystemMessage(content=memory_text))
-                logger.debug("long_term_memory_injected", user_id=user_id)
-        except Exception as e:
-            logger.warning("long_term_memory_load_failed", user_id=user_id, error=str(e))
 
     input_messages.append(HumanMessage(content=message))
 
@@ -218,6 +135,7 @@ async def run_agent(
                 "recursion_limit": 50,
             },
             config,
+            context=user_ctx,
         )
 
         # 최종 AI 응답 추출
@@ -227,13 +145,6 @@ async def run_agent(
                 response = msg.content
                 break
 
-        # 장기 메모리 추출 및 저장 (비동기, 응답에 영향 없음)
-        if pg_store and user_id and response:
-            try:
-                await _extract_memories(message, response, pg_store, user_id)
-            except Exception as e:
-                logger.warning("memory_extraction_error", error=str(e))
-
         return {
             "response": response,
             "thread_id": thread_id,
@@ -242,7 +153,7 @@ async def run_agent(
         }
 
     except Exception as e:
-        logger.error("Supervisor agent execution failed", error=str(e), thread_id=thread_id)
+        logger.error("Supervisor agent execution failed", error=str(e), thread_id=thread_id, exc_info=True)
         return {
             "response": f"처리 중 내부 오류가 발생했습니다: {str(e)}",
             "agent_used": None,

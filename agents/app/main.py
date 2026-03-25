@@ -4,11 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.store.postgres import PostgresStore
 
 from app.config import settings
 from app.observability.tracing import setup_tracing
 from app.memory.redis_store import RedisStore
-from app.memory.pg_user_store import PgUserStore
 from app.graph.supervisor import supervisor_agent, create_redis_checkpointer
 
 from dotenv import load_dotenv
@@ -29,29 +29,28 @@ async def lifespan(app: FastAPI):
     await redis_store.initialize()
     app.state.redis = redis_store
 
-    # Initialize PostgreSQL user memory store (agent_db, shared with RAG service)
-    pg_store = PgUserStore()
-    await pg_store.initialize()
-    app.state.pg_store = pg_store
+    # Initialize PostgreSQL user memory store
+    with PostgresStore.from_conn_string(settings.POSTGRES_PROFILE_URL) as store:
+        store.setup()
+        app.state.store = store
 
-    # Create Redis checkpointer and supervisor agent
-    async with create_redis_checkpointer() as checkpointer:
-        app.state.checkpointer = checkpointer
-        app.state.graph = supervisor_agent(checkpointer)
+        # Create Redis checkpointer and supervisor agent
+        async with create_redis_checkpointer() as checkpointer:
+            app.state.checkpointer = checkpointer
+            app.state.graph = supervisor_agent(checkpointer, store)
 
-        logger.info(
-            "Shopping Agent Service started",
-            product_service=settings.PRODUCT_SERVICE_URL,
-            review_service=settings.REVIEW_SERVICE_URL,
-            order_service=settings.ORDER_SERVICE_URL,
-        )
+            logger.info(
+                "Shopping Agent Service started",
+                product_service=settings.PRODUCT_SERVICE_URL,
+                review_service=settings.REVIEW_SERVICE_URL,
+                order_service=settings.ORDER_SERVICE_URL,
+            )
 
-        yield
+            yield
 
     # Cleanup
     logger.info("Shutting down Shopping Agent Service...")
     await redis_store.close()
-    await pg_store.close()
     logger.info("Shopping Agent Service stopped")
 
 

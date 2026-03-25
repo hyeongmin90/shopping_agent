@@ -175,6 +175,46 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-profile:
+    image: postgres:16-alpine
+    container_name: shopping-postgres-profile
+    environment:
+      POSTGRES_USER: profile_user
+      POSTGRES_PASSWORD: profile_pass
+      POSTGRES_DB: profile_db
+    ports:
+      - "5440:5432"
+    volumes:
+      - postgres-profile-data:/var/lib/postgresql/data
+    networks:
+      - shopping-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U profile_user -d profile_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Search & Vector DB
+  # ============================================================
+
+  postgres-agent:
+    image: pgvector/pgvector:pg16
+    container_name: shopping-postgres-agent
+    environment:
+      POSTGRES_DB: agent_db
+      POSTGRES_USER: agent_user
+      POSTGRES_PASSWORD: agent_pass
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres-agent-data:/var/lib/postgresql/data
+    networks:
+      - shopping-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U agent_user -d agent_db" ]
+      interval: 10s
+
   # ============================================================
   # Observability
   # ============================================================
@@ -202,28 +242,6 @@ services:
       - "14268:14268" # Jaeger collector HTTP
     networks:
       - shopping-net
-
-  # ============================================================
-  # Search & Vector DB
-  # ============================================================
-
-  postgres-agent:
-    image: pgvector/pgvector:pg16
-    container_name: shopping-postgres-agent
-    environment:
-      POSTGRES_DB: agent_db
-      POSTGRES_USER: agent_user
-      POSTGRES_PASSWORD: agent_pass
-    ports:
-      - "5437:5432"
-    volumes:
-      - postgres-agent-data:/var/lib/postgresql/data
-      - ./tools/seed/postgres/agent-init.sql:/docker-entrypoint-initdb.d/01-init.sql
-    networks:
-      - shopping-net
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U agent_user -d agent_db" ]
-      interval: 10s
 
   # ============================================================
   # Spring Boot Microservices
@@ -480,3 +498,4 @@ volumes:
   postgres-inventory-data:
   postgres-payment-data:
   postgres-agent-data:
+  postgres-profile-data:
