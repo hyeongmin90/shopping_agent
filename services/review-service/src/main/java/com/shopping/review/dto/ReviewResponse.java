@@ -10,7 +10,7 @@ import lombok.Value;
 public class ReviewResponse {
     UUID id;
     UUID productId;
-    UUID userId;
+    String userId;
     Integer rating;
     String title;
     String content;

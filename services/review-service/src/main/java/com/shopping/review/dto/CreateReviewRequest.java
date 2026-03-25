@@ -7,15 +7,19 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 @Data
+@Getter
+@Setter
 public class CreateReviewRequest {
 
     @NotNull
     private UUID productId;
 
     @NotNull
-    private UUID userId;
+    private String userId;
 
     @NotNull
     @Min(1)

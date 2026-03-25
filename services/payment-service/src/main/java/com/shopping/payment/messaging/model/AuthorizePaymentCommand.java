@@ -4,7 +4,7 @@ import java.util.UUID;
 
 public record AuthorizePaymentCommand(
         UUID orderId,
-        UUID userId,
+        String userId,
         Integer amount,
         String currency,
         String paymentMethod

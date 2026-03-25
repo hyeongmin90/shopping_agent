@@ -32,13 +32,13 @@ public class CartService {
     private final ProductServiceClient productServiceClient;
 
     @Transactional
-    public CartResponse getCart(UUID userId) {
+    public CartResponse getCart(String userId) {
         CartEntity cart = getOrCreateCart(userId);
         return toResponse(cart);
     }
 
     @Transactional
-    public CartResponse addItem(UUID userId, CartItemRequest request) {
+    public CartResponse addItem(String userId, CartItemRequest request) {
         CartEntity cart = getOrCreateCart(userId);
 
         CartItemEntity item = new CartItemEntity();
@@ -56,7 +56,7 @@ public class CartService {
     }
 
     @Transactional
-    public CartResponse removeItem(UUID userId, UUID itemId) {
+    public CartResponse removeItem(String userId, UUID itemId) {
         CartEntity cart = getOrCreateCart(userId);
 
         boolean removed = cart.getItems().removeIf(item -> item.getId().equals(itemId));
@@ -70,7 +70,7 @@ public class CartService {
     }
 
     @Transactional
-    public CartResponse updateItem(UUID userId, UUID itemId, CartItemRequest request) {
+    public CartResponse updateItem(String userId, UUID itemId, CartItemRequest request) {
         CartEntity cart = getOrCreateCart(userId);
 
         CartItemEntity item = cart.getItems().stream()
@@ -87,7 +87,7 @@ public class CartService {
     }
 
     @Transactional
-    public CheckoutResponse checkout(UUID userId, CheckoutRequest request) {
+    public CheckoutResponse checkout(String userId, CheckoutRequest request) {
         CartEntity cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Cart not found for user: " + userId));
 
@@ -136,7 +136,7 @@ public class CartService {
                 order.getCurrency());
     }
 
-    private CartEntity getOrCreateCart(UUID userId) {
+    private CartEntity getOrCreateCart(String userId) {
         return cartRepository.findByUserId(userId).orElseGet(() -> {
             CartEntity newCart = new CartEntity();
             newCart.setUserId(userId);

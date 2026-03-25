@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CartResponse {
     private UUID id;
-    private UUID userId;
+    private String userId;
     private String currency;
     private Integer totalAmount;
     private LocalDateTime createdAt;

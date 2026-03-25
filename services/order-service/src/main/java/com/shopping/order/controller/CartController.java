@@ -25,23 +25,23 @@ public class CartController {
     private final CartService cartService;
 
     @GetMapping("/user/{userId}")
-    public CartResponse getCart(@PathVariable UUID userId) {
+    public CartResponse getCart(@PathVariable String userId) {
         return cartService.getCart(userId);
     }
 
     @PostMapping("/user/{userId}/items")
-    public CartResponse addItem(@PathVariable UUID userId, @Valid @RequestBody CartItemRequest request) {
+    public CartResponse addItem(@PathVariable String userId, @Valid @RequestBody CartItemRequest request) {
         return cartService.addItem(userId, request);
     }
 
     @DeleteMapping("/user/{userId}/items/{itemId}")
-    public CartResponse removeItem(@PathVariable UUID userId, @PathVariable UUID itemId) {
+    public CartResponse removeItem(@PathVariable String userId, @PathVariable UUID itemId) {
         return cartService.removeItem(userId, itemId);
     }
 
     @PutMapping("/user/{userId}/items/{itemId}")
     public CartResponse updateItem(
-            @PathVariable UUID userId,
+            @PathVariable String userId,
             @PathVariable UUID itemId,
             @Valid @RequestBody CartItemRequest request) {
         return cartService.updateItem(userId, itemId, request);
@@ -49,7 +49,7 @@ public class CartController {
 
     @PostMapping("/user/{userId}/checkout")
     public CheckoutResponse checkout(
-            @PathVariable UUID userId,
+            @PathVariable String userId,
             @RequestBody(required = false) CheckoutRequest request) {
         return cartService.checkout(userId, request == null ? new CheckoutRequest() : request);
     }

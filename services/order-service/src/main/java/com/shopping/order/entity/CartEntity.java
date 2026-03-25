@@ -22,7 +22,7 @@ public class CartEntity {
     private UUID id;
 
     @Column(name = "user_id", nullable = false, unique = true)
-    private UUID userId;
+    private String userId;
 
     @Column(nullable = false)
     private String currency = "KRW";

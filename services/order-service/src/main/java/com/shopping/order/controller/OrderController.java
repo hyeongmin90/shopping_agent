@@ -29,7 +29,7 @@ public class OrderController {
     }
 
     @GetMapping("/user/{userId}")
-    public List<OrderResponse> getOrdersByUser(@PathVariable UUID userId) {
+    public List<OrderResponse> getOrdersByUser(@PathVariable String userId) {
         return orderService.getOrdersByUser(userId);
     }
 

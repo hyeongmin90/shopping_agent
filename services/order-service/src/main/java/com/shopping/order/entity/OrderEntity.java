@@ -32,7 +32,7 @@ public class OrderEntity {
     private UUID id;
 
     @Column(name = "user_id", nullable = false)
-    private UUID userId;
+    private String userId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

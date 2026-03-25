@@ -11,7 +11,7 @@ import lombok.Getter;
 @Builder
 public class OrderResponse {
     private UUID id;
-    private UUID userId;
+    private String userId;
     private OrderStatus status;
     private Integer totalAmount;
     private String currency;
