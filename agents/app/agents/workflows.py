@@ -151,7 +151,7 @@ async def cart_management_agent_tool(
     ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
-    """사용자의 장바구니에 상품을 추가/삭제하거나 예산을 관리하는 에이전트를 호출합니다. 주문, 결제 기능은 지원하지 않습니다."""
+    """사용자의 장바구니에 상품을 추가/삭제하거나 예산을 관리하는 에이전트를 호출합니다. 상품검색, 주문, 결제 기능은 지원하지 않습니다."""
     logger.info("Cart management Agent called")
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
     logger.info(f"Cart management Agent context: {filtered_ctx}")

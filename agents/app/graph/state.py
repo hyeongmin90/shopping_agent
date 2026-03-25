@@ -1,6 +1,6 @@
 """LangGraph agent state definition."""
 
-from typing import Annotated, Any, Optional, Sequence
+from typing import Annotated, Sequence
 from typing_extensions import TypedDict
 
 from langchain_core.messages import BaseMessage

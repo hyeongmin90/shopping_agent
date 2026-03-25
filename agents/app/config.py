@@ -6,10 +6,9 @@ class Settings(BaseSettings):
     """Application settings from environment variables."""
 
     # OpenAI
-
-    OPENAI_API_KEY: str = "sk-mock-your-api-key"
-    OPENAI_SUPERVISOR_MODEL: str = "gpt-5-mini"
-    OPENAI_SUB_AGENT_MODEL: str = "gpt-4o-mini"
+    OPENAI_API_KEY: str
+    OPENAI_SUPERVISOR_MODEL: str = "gpt-4o-mini"
+    OPENAI_SUB_AGENT_MODEL: str = "gpt-5-nano"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_EMBEDDING_DIMENSION: int = 1536
 
@@ -37,7 +36,7 @@ class Settings(BaseSettings):
     RAG_SERVICE_URL: str = "http://localhost:8002"
 
     # PostgreSQL
-    POSTGRES_PROFILE_URL: str = "postgresql://profile_user:profile_pass@localhost:5440/profile_db"
+    POSTGRES_PROFILE_URL: str | None = None
 
     # Agent settings
     MAX_AGENT_ITERATIONS: int = 15

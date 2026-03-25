@@ -30,7 +30,6 @@ class ChatResponse(BaseModel):
 
     message: str = Field(..., description="Agent response")
     thread_id: str = Field(..., description="Thread ID for continuing conversation")
-    agent_used: Optional[str] = Field(None, description="Which agent handled the request")
     metadata: Optional[dict] = Field(None, description="Additional metadata")
 
 

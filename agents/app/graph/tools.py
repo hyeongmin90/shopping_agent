@@ -29,11 +29,11 @@ async def search_products(
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
 ) -> str:
     """
-    Search products in the store. Prices are in KRW (Korean Won).
+    상품을 검색합니다. 
     
     Args:
-        search: 검색어
-        category: 카테고리
+        search: 검색어 (정확한 상품명이 아니면 결과가 나오지 않으니, 되도록 카테고리나 브랜드로 검색하세요)
+        category: 카테고리 (get_categories()로 확인하세요)
         brand: 브랜드
         min_price: 최소 가격
         max_price: 최대 가격
