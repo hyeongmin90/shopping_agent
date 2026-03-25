@@ -8,6 +8,7 @@ from langgraph.prebuilt import InjectedState
 
 from app.tools import service_clients as sc
 from app.graph.id_mapper import IdMapper
+from app.memory.redis_store import RedisStore
 
 import structlog
 
@@ -27,6 +28,7 @@ async def search_products(
     max_price: Optional[int] = None,
     user_id: Annotated[str, InjectedState("user_id")] = None,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
+    ctx: Annotated[dict, InjectedState("context")] = None,
 ) -> str:
     """
     상품을 검색합니다. 
@@ -60,7 +62,9 @@ async def search_products(
                     recent_products.append({"id": masked_id, "name": p.get("name", "Unknown")})
             
             if recent_products:
-                from app.memory.redis_store import RedisStore
+                if ctx is not None:
+                    ctx["recent_products"] = recent_products
+                    
                 redis_store = RedisStore()
                 await redis_store.initialize()
                 await redis_store.update_context(thread_id, {"recent_products": recent_products})
@@ -375,6 +379,7 @@ async def rag_search_reviews(
     verified_only: bool = False,
     user_id: Annotated[str, InjectedState("user_id")] = None,
     thread_id: Annotated[str, InjectedState("thread_id")] = None,
+    ctx: Annotated[dict, InjectedState("context")] = None,
 ) -> str:
     """Search product reviews using semantic vector search."""
     try:
@@ -407,6 +412,9 @@ async def rag_search_reviews(
                     r["id"] = await IdMapper.get_index(thread_id, r["id"], "r")
             
             if recent_products:
+                if ctx is not None:
+                    ctx["recent_products"] = recent_products
+                
                 from app.memory.redis_store import RedisStore
                 redis_store = RedisStore()
                 await redis_store.initialize()
