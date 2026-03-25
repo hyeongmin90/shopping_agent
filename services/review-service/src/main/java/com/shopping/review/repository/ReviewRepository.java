@@ -76,4 +76,6 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
                         Pageable pageable);
 
         long countByProductId(UUID productId);
+
+        List<Review> findByProductIdOrderByCreatedAtDesc(UUID productId, Pageable pageable);
 }

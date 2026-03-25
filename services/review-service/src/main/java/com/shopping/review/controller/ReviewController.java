@@ -6,6 +6,7 @@ import com.shopping.review.dto.ReviewSearchRequest;
 import com.shopping.review.dto.ReviewSummaryResponse;
 import com.shopping.review.service.ReviewService;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -45,6 +46,13 @@ public class ReviewController {
                 minRating,
                 maxRating,
                 verifiedOnly);
+    }
+
+    @GetMapping("/product/{productId}/recent")
+    public List<ReviewResponse> getRecentReviews(
+            @PathVariable UUID productId,
+            @RequestParam(defaultValue = "5") int limit) {
+        return reviewService.getRecentReviews(productId, limit);
     }
 
     @GetMapping("/product/{productId}/summary")

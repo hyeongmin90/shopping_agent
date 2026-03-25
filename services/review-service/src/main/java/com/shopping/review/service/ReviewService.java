@@ -10,6 +10,7 @@ import com.shopping.review.repository.RatingCountView;
 import com.shopping.review.repository.ReviewRepository;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -96,6 +97,15 @@ public class ReviewService {
                 Boolean.TRUE.equals(request.getVerifiedOnly()),
                 pageable);
         return reviews.map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewResponse> getRecentReviews(UUID productId, int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+        return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional
