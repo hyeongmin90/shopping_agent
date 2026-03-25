@@ -9,6 +9,7 @@ import com.shopping.product.dto.ProductResponse;
 import com.shopping.product.dto.ProductSearchRequest;
 import com.shopping.product.dto.ProductVariantResponse;
 import com.shopping.product.exception.ResourceNotFoundException;
+import com.shopping.product.kafka.ProductEventPublisher;
 import com.shopping.product.repository.CategoryRepository;
 import com.shopping.product.repository.ProductRepository;
 import com.shopping.product.repository.ProductVariantRepository;
@@ -33,6 +34,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
     private final CategoryRepository categoryRepository;
+    private final ProductEventPublisher productEventPublisher;
 
     @Transactional
     @CacheEvict(value = {"productSearch", "categoryTree"}, allEntries = true)
@@ -75,7 +77,9 @@ public class ProductService {
             }
         }
 
-        return toProductResponse(savedProduct, savedVariants);
+        ProductResponse response = toProductResponse(savedProduct, savedVariants);
+        productEventPublisher.publishProductIndexEvent(response, "ProductCreatedEvent");
+        return response;
     }
 
     @Cacheable(value = "productSearch", key = "T(java.lang.String).format('%s:%d:%d:%s', #request.cacheKey(), #pageable.pageNumber, #pageable.pageSize, #pageable.sort.toString())")

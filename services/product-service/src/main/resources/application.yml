@@ -60,6 +60,7 @@ app:
   kafka:
     topics:
       product-viewed: product.viewed.v1
+      product-events: product.events
 
 ---
 spring:
