@@ -15,7 +15,6 @@ from app.graph.tools import (
     SEARCH_AGENT_TOOLS, REVIEW_AGENT_TOOLS, CART_AGENT_TOOLS, CUSTOMER_SERVICE_AGENT_TOOLS
 )
 from app.agents.specialized import get_agent_prompt, _get_llm
-from app.memory.redis_store import RedisStore
 
 import structlog
 
@@ -115,18 +114,14 @@ async def product_search_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
     thread_id: Annotated[str, InjectedState("thread_id")],
+    ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
     """상품을 검색하는 에이전트를 호출합니다. 사용자가 상품 추천, 검색, 조회를 원할 때 이 도구를 사용합니다."""
     # load context
     logger.info("Product search Agent called")
-    store = RedisStore()
-    await store.initialize()
-    ctx = await store.get_context(thread_id) or {}
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
     logger.info(f"Product search Agent context: {filtered_ctx}")
-    
-    await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await product_search_graph.ainvoke(initial_state, config)
@@ -137,15 +132,12 @@ async def review_analysis_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
     thread_id: Annotated[str, InjectedState("thread_id")],
+    ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
     """상품의 리뷰, 평점, 사이즈 의견 등을 분석하는 에이전트를 호출합니다."""
     logger.info("Review analysis Agent called")
-    store = RedisStore()
-    await store.initialize()
-    ctx = await store.get_context(thread_id) or {}
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
-    await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await review_analysis_graph.ainvoke(initial_state, config)
@@ -156,17 +148,13 @@ async def cart_management_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
     thread_id: Annotated[str, InjectedState("thread_id")],
+    ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
     """사용자의 장바구니에 상품을 추가/삭제하거나 예산을 관리하는 에이전트를 호출합니다. 주문, 결제 기능은 지원하지 않습니다."""
     logger.info("Cart management Agent called")
-    store = RedisStore()
-    await store.initialize()
-    ctx = await store.get_context(thread_id) or {}
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
-    
     logger.info(f"Cart management Agent context: {filtered_ctx}")
-    await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await cart_management_graph.ainvoke(initial_state, config)
@@ -177,15 +165,12 @@ async def customer_service_agent_tool(
     query: str, 
     user_id: Annotated[str, InjectedState("user_id")], 
     thread_id: Annotated[str, InjectedState("thread_id")],
+    ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
     """주문 상태 조회, 환불/취소 절차 문의, 각종 쇼핑몰 정책 정보를 답변하는 CS 에이전트를 호출합니다."""
     logger.info("Customer service Agent called")
-    store = RedisStore()
-    await store.initialize()
-    ctx = await store.get_context(thread_id) or {}
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
-    await store.close()
     
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await customer_service_graph.ainvoke(initial_state, config)
