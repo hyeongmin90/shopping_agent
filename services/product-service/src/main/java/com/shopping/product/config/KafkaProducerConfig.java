@@ -1,5 +1,6 @@
 package com.shopping.product.config;
 
+import com.shopping.product.kafka.ProductIndexEvent;
 import com.shopping.product.kafka.ProductViewedEvent;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,10 +17,10 @@ import org.springframework.kafka.support.serializer.JsonSerializer;
 @Configuration
 public class KafkaProducerConfig {
 
-    @Bean
-    public ProducerFactory<String, ProductViewedEvent> productViewedEventProducerFactory(
-        @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers
-    ) {
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+
+    private Map<String, Object> producerConfigs() {
         Map<String, Object> config = new HashMap<>();
         config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -27,7 +28,12 @@ public class KafkaProducerConfig {
         config.put(ProducerConfig.ACKS_CONFIG, "all");
         config.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         config.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
-        return new DefaultKafkaProducerFactory<>(config);
+        return config;
+    }
+
+    @Bean
+    public ProducerFactory<String, ProductViewedEvent> productViewedEventProducerFactory() {
+        return new DefaultKafkaProducerFactory<>(producerConfigs());
     }
 
     @Bean
@@ -35,5 +41,17 @@ public class KafkaProducerConfig {
         ProducerFactory<String, ProductViewedEvent> productViewedEventProducerFactory
     ) {
         return new KafkaTemplate<>(productViewedEventProducerFactory);
+    }
+
+    @Bean
+    public ProducerFactory<String, ProductIndexEvent> productIndexEventProducerFactory() {
+        return new DefaultKafkaProducerFactory<>(producerConfigs());
+    }
+
+    @Bean
+    public KafkaTemplate<String, ProductIndexEvent> productIndexKafkaTemplate(
+        ProducerFactory<String, ProductIndexEvent> productIndexEventProducerFactory
+    ) {
+        return new KafkaTemplate<>(productIndexEventProducerFactory);
     }
 }
