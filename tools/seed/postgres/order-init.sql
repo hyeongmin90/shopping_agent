@@ -3,7 +3,7 @@
 -- Orders (cart starts as DRAFT)
 CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
     total_amount INTEGER DEFAULT 0,
     currency VARCHAR(3) DEFAULT 'KRW',

@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL,
-    user_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     amount INTEGER NOT NULL,
     currency VARCHAR(3) DEFAULT 'KRW',
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
