@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopping.order.entity.OutboxEvent;
 import com.shopping.order.repository.OutboxEventRepository;
 import com.shopping.order.support.EventEnvelope;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -17,6 +20,7 @@ public class OutboxService {
 
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+    private final Tracer tracer;
 
     public void enqueue(
             String aggregateType,
@@ -49,7 +53,16 @@ public class OutboxService {
         outboxEvent.setCorrelationId(correlationId);
         outboxEvent.setCausationId(causationId);
         outboxEvent.setIdempotencyKey(idempotencyKey);
+        outboxEvent.setTraceparent(currentTraceparent());
         outboxEventRepository.save(outboxEvent);
+    }
+
+    private String currentTraceparent() {
+        Span span = tracer.currentSpan();
+        if (span == null) return null;
+        TraceContext ctx = span.context();
+        String flags = Boolean.TRUE.equals(ctx.sampled()) ? "01" : "00";
+        return "00-" + ctx.traceId() + "-" + ctx.spanId() + "-" + flags;
     }
 
     private String write(Object value) {

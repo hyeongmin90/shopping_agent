@@ -43,6 +43,9 @@ public class OutboxEvent {
     @Column(name = "idempotency_key")
     private String idempotencyKey;
 
+    @Column(name = "traceparent", length = 55)
+    private String traceparent;
+
     private boolean published;
 
     @Column(name = "created_at")

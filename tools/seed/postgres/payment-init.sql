@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     correlation_id VARCHAR(255),
     causation_id VARCHAR(255),
     idempotency_key VARCHAR(100),
+    traceparent VARCHAR(55),
     published BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     published_at TIMESTAMP
