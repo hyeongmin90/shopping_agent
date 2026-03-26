@@ -18,9 +18,9 @@ import structlog
 
 logger = structlog.get_logger()
 
-# 대화 이력이 마지막으로 사용된 후 유지되는 시간 (초)
+# 대화 이력이 마지막으로 사용된 후 유지되는 시간 (분)
 # 이 시간이 지나면 Redis TTL에 의해 체크포인트가 자동 삭제되어 대화가 초기화됩니다.
-CONVERSATION_TTL = int(getattr(settings, "CONVERSATION_TTL", 1800))
+CONVERSATION_TTL_MINUTES = int(getattr(settings, "CONVERSATION_TTL", 30))
 
 SUPERVISOR_PROMPT = """당신은 지능형 쇼핑 에이전트 시스템의 메인 슈퍼바이저입니다.
 
@@ -88,10 +88,15 @@ def supervisor_agent(checkpointer: AsyncRedisSaver, store: PostgresStore):
 @asynccontextmanager
 async def create_redis_checkpointer():
     """AsyncRedisSaver를 생성하고 필요한 인덱스를 세팅한 뒤 반환합니다."""
-    async with AsyncRedisSaver.from_conn_string(settings.REDIS_URL) as saver:
-        saver.ttl = CONVERSATION_TTL
+    ttl_config = {
+        "default_ttl": CONVERSATION_TTL_MINUTES,
+        "refresh_on_read": True,
+    }
+    async with AsyncRedisSaver.from_conn_string(
+        settings.REDIS_URL, ttl=ttl_config
+    ) as saver:
         await saver.asetup()
-        logger.info(f"Redis checkpointer initialized with TTL: {CONVERSATION_TTL}s")
+        logger.info(f"Redis checkpointer initialized with TTL: {CONVERSATION_TTL_MINUTES}min")
         yield saver
 
 
