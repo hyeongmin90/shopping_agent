@@ -15,7 +15,6 @@ import com.shopping.inventory.kafka.model.ReserveInventoryCommand;
 import com.shopping.inventory.kafka.model.ReserveInventoryItemCommand;
 import com.shopping.inventory.repository.InventoryRepository;
 import com.shopping.inventory.repository.InventoryReservationRepository;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

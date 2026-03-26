@@ -32,7 +32,8 @@ public class OutboxPublisher {
     @Transactional
     @Scheduled(fixedDelayString = "${app.outbox.publish-interval-ms:2000}")
     public void publishPendingEvents() {
-        List<OutboxEvent> events = outboxEventRepository.findByPublishedFalseOrderByCreatedAtAsc(PageRequest.of(0, batchSize));
+        List<OutboxEvent> events = outboxEventRepository
+                .findByPublishedFalseOrderByCreatedAtAsc(PageRequest.of(0, batchSize));
         for (OutboxEvent event : events) {
             publishWithTrace(event);
         }
@@ -55,7 +56,7 @@ public class OutboxPublisher {
     }
 
     private Span buildSpan(OutboxEvent event, String topic) {
-        Tracer.SpanBuilder builder = tracer.spanBuilder()
+        Span.Builder builder = tracer.spanBuilder()
                 .name("outbox publish " + event.getEventType())
                 .kind(Span.Kind.PRODUCER)
                 .tag("messaging.system", "kafka")

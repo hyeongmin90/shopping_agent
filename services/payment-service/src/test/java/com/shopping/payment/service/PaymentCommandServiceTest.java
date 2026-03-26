@@ -43,12 +43,11 @@ class PaymentCommandServiceTest {
     void handleAuthorize_Success() {
         // given
         UUID orderId = UUID.randomUUID();
-        UUID userId = UUID.randomUUID();
+        String userId = "test-user-id";
         AuthorizePaymentCommand command = new AuthorizePaymentCommand(orderId, userId, 1000, "KRW", "CARD");
-        
+
         MockPaymentGateway.GatewayResult gatewayResult = new MockPaymentGateway.GatewayResult(
-                MockPaymentGateway.GatewayOutcome.APPROVED, "AUTH-123", null
-        );
+                MockPaymentGateway.GatewayOutcome.APPROVED, "AUTH-123", null);
 
         when(mockPaymentGateway.authorize(anyInt())).thenReturn(gatewayResult);
         when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> {

@@ -16,7 +16,6 @@ import com.shopping.order.entity.CartEntity;
 import com.shopping.order.entity.CartItemEntity;
 import com.shopping.order.entity.OrderEntity;
 import com.shopping.order.exception.BadRequestException;
-import com.shopping.order.exception.NotFoundException;
 import com.shopping.order.repository.CartItemRepository;
 import com.shopping.order.repository.CartRepository;
 import com.shopping.order.repository.OrderRepository;
@@ -49,12 +48,12 @@ class CartServiceTest {
     @InjectMocks
     private CartService cartService;
 
-    private UUID userId;
+    private String userId;
     private CartEntity cart;
 
     @BeforeEach
     void setUp() {
-        userId = UUID.randomUUID();
+        userId = "test-user-id";
         cart = new CartEntity();
         cart.setId(UUID.randomUUID());
         cart.setUserId(userId);

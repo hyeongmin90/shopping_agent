@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,7 +52,7 @@ class OrderServiceTest {
         orderId = UUID.randomUUID();
         order = new OrderEntity();
         order.setId(orderId);
-        order.setUserId(UUID.randomUUID());
+        order.setUserId("test-user-id");
         order.setStatus(OrderStatus.PENDING_APPROVAL);
         order.setSagaStatus(OrderSagaStatus.NONE);
         order.setTotalAmount(10000);
@@ -108,8 +107,7 @@ class OrderServiceTest {
                 any(),
                 eq(orderId),
                 any(),
-                anyString()
-        );
+                anyString());
     }
 
     @Test
@@ -144,7 +142,6 @@ class OrderServiceTest {
                 any(),
                 eq(orderId),
                 any(),
-                anyString()
-        );
+                anyString());
     }
 }

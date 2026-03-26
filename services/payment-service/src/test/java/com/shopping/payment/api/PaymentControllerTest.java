@@ -5,11 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.shopping.payment.api.dto.PaymentResponse;
 import com.shopping.payment.domain.Payment;
 import com.shopping.payment.domain.PaymentStatus;
 import com.shopping.payment.service.PaymentQueryService;
-import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,7 +34,7 @@ class PaymentControllerTest {
         Payment payment = new Payment();
         payment.setId(paymentId);
         payment.setOrderId(orderId);
-        payment.setUserId(UUID.randomUUID());
+        payment.setUserId("test-user-id");
         payment.setAmount(1000);
         payment.setStatus(PaymentStatus.CAPTURED);
 

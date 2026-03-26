@@ -1,6 +1,5 @@
 package com.shopping.inventory.controller;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -36,8 +35,7 @@ class InventoryControllerTest {
         UUID productId = UUID.randomUUID();
         InventoryResponse response = new InventoryResponse(
                 UUID.randomUUID(), productId, UUID.randomUUID(), "SKU-001",
-                100, 10, 90, 5, false
-        );
+                100, 10, 90, 5, false);
 
         when(inventoryQueryService.getInventoryByProduct(productId)).thenReturn(List.of(response));
 
