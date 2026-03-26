@@ -141,15 +141,6 @@ async def get_product_reviews(
     )
 
 
-async def get_review_summary(product_id: str) -> dict:
-    """Get review summary for a product."""
-    return await _request(
-        "GET",
-        f"{settings.REVIEW_SERVICE_URL}/api/reviews/product/{product_id}/summary",
-        "review-service",
-    )
-
-
 async def search_reviews(product_id: str, keyword: str) -> dict:
     """Search reviews by keyword."""
     return await _request(

@@ -141,20 +141,6 @@ async def get_product_reviews(
 
 
 @tool
-async def get_review_summary(
-    product_id: str,
-    thread_id: Annotated[str, InjectedState("thread_id")] = None,
-) -> str:
-    """Get review summary including average rating and quality rating."""
-    try:
-        real_product_id = await IdMapper.get_real_id(thread_id, product_id)
-        result = await sc.get_review_summary(real_product_id)
-        return json.dumps(result, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
-
-
-@tool
 async def search_reviews(
     product_id: str,
     keyword: str,
@@ -190,8 +176,8 @@ async def get_recent_reviews(
         real_product_id = await IdMapper.get_real_id(thread_id, product_id)
         result = await sc.get_recent_reviews(real_product_id, limit)
 
-        if isinstance(result, list):
-            for r in result:
+        if isinstance(result, dict) and "reviews" in result:
+            for r in result["reviews"]:
                 await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
 
         return json.dumps(result, ensure_ascii=False)
@@ -480,7 +466,7 @@ async def rag_search_policies(
 # ============================================================
 
 SEARCH_AGENT_TOOLS = [search_products, get_product_details, get_categories]
-REVIEW_AGENT_TOOLS = [get_product_reviews, get_review_summary, search_reviews, get_recent_reviews, rag_search_reviews]
+REVIEW_AGENT_TOOLS = [get_product_reviews, get_recent_reviews, search_reviews, rag_search_reviews]
 CART_AGENT_TOOLS = [get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity]
 CUSTOMER_SERVICE_AGENT_TOOLS = [get_order_details, get_user_orders, rag_search_policies]
 

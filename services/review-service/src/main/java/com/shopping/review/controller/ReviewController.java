@@ -3,7 +3,7 @@ package com.shopping.review.controller;
 import com.shopping.review.dto.CreateReviewRequest;
 import com.shopping.review.dto.ReviewResponse;
 import com.shopping.review.dto.ReviewSearchRequest;
-import com.shopping.review.dto.ReviewSummaryResponse;
+import com.shopping.review.dto.RecentReviewsResponse;
 import com.shopping.review.service.ReviewService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -49,15 +49,10 @@ public class ReviewController {
     }
 
     @GetMapping("/product/{productId}/recent")
-    public List<ReviewResponse> getRecentReviews(
+    public RecentReviewsResponse getRecentReviews(
             @PathVariable UUID productId,
             @RequestParam(defaultValue = "5") int limit) {
         return reviewService.getRecentReviews(productId, limit);
-    }
-
-    @GetMapping("/product/{productId}/summary")
-    public ReviewSummaryResponse getSummary(@PathVariable UUID productId) {
-        return reviewService.getReviewSummary(productId);
     }
 
     @GetMapping("/search")

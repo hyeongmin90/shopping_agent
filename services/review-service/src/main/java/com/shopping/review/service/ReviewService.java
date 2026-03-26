@@ -2,24 +2,19 @@ package com.shopping.review.service;
 
 import com.shopping.review.domain.Review;
 import com.shopping.review.dto.CreateReviewRequest;
+import com.shopping.review.dto.RecentReviewsResponse;
 import com.shopping.review.dto.ReviewResponse;
 import com.shopping.review.dto.ReviewSearchRequest;
-import com.shopping.review.dto.ReviewSummaryResponse;
 import com.shopping.review.outbox.OutboxService;
-import com.shopping.review.repository.RatingCountView;
 import com.shopping.review.repository.ReviewRepository;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -61,27 +56,6 @@ public class ReviewService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "reviewSummary", key = "#productId")
-    public ReviewSummaryResponse getReviewSummary(UUID productId) {
-        Double averageRating = reviewRepository.findAverageRatingByProductId(productId);
-        Double averageQualityRating = reviewRepository.findAverageQualityRatingByProductId(productId);
-        long totalReviews = reviewRepository.countByProductId(productId);
-
-        Map<Integer, Long> ratingDistribution = Arrays.stream(new Integer[] { 1, 2, 3, 4, 5 })
-                .collect(Collectors.toMap(Function.identity(), rating -> 0L));
-        for (RatingCountView row : reviewRepository.countByRatingForProduct(productId)) {
-            ratingDistribution.put(row.getRating(), row.getCount());
-        }
-
-        return ReviewSummaryResponse.builder()
-                .averageRating(roundToTwoDecimals(averageRating))
-                .totalReviews(totalReviews)
-                .ratingDistribution(ratingDistribution)
-                .averageQualityRating(roundToTwoDecimals(averageQualityRating))
-                .build();
-    }
-
-    @Transactional(readOnly = true)
     public Page<ReviewResponse> searchReviews(ReviewSearchRequest request) {
         validateRatingRange(request.getMinRating(), request.getMaxRating());
         if (request.getKeyword() == null || request.getKeyword().trim().isEmpty()) {
@@ -100,16 +74,22 @@ public class ReviewService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReviewResponse> getRecentReviews(UUID productId, int limit) {
+    public RecentReviewsResponse getRecentReviews(UUID productId, int limit) {
         Pageable pageable = PageRequest.of(0, limit);
-        return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
+        List<ReviewResponse> reviews = reviewRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
                 .stream()
                 .map(this::toResponse)
                 .toList();
+        Double averageRating = reviewRepository.findAverageRatingByProductId(productId);
+        long totalReviews = reviewRepository.countByProductId(productId);
+        return RecentReviewsResponse.builder()
+                .averageRating(roundToTwoDecimals(averageRating))
+                .totalReviews(totalReviews)
+                .reviews(reviews)
+                .build();
     }
 
     @Transactional
-    @CacheEvict(value = "reviewSummary", key = "#request.productId")
     public ReviewResponse createReview(CreateReviewRequest request) {
         Review review = Review.builder()
                 .productId(request.getProductId())
