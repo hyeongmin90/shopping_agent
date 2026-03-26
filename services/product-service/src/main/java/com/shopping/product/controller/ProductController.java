@@ -1,5 +1,6 @@
 package com.shopping.product.controller;
 
+import com.shopping.product.dto.AddVariantsRequest;
 import com.shopping.product.dto.CategoryResponse;
 import com.shopping.product.dto.ProductRequest;
 import com.shopping.product.dto.ProductResponse;
@@ -66,6 +67,14 @@ public class ProductController {
     @GetMapping("/{id}/variants")
     public List<ProductVariantResponse> getProductVariants(@PathVariable UUID id) {
         return productService.getVariants(id);
+    }
+
+    @PostMapping("/{id}/variants")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<ProductVariantResponse> addProductVariants(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddVariantsRequest request) {
+        return productService.addVariants(id, request);
     }
 
     @GetMapping("/categories")

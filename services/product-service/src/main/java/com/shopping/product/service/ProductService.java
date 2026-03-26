@@ -3,6 +3,7 @@ package com.shopping.product.service;
 import com.shopping.product.domain.Category;
 import com.shopping.product.domain.Product;
 import com.shopping.product.domain.ProductVariant;
+import com.shopping.product.dto.AddVariantsRequest;
 import com.shopping.product.dto.CategoryResponse;
 import com.shopping.product.dto.ProductRequest;
 import com.shopping.product.dto.ProductResponse;
@@ -158,6 +159,30 @@ public class ProductService {
         Product product = productRepository.findDetailedById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
         return toProductResponse(product, product.getVariants());
+    }
+
+    @Transactional
+    @CacheEvict(value = "productDetails", key = "#productId")
+    public List<ProductVariantResponse> addVariants(UUID productId, AddVariantsRequest request) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + productId));
+
+        List<ProductVariant> saved = new ArrayList<>();
+        for (AddVariantsRequest.VariantRequest vr : request.variants()) {
+            ProductVariant variant = new ProductVariant();
+            variant.setId(UUID.randomUUID());
+            variant.setProduct(product);
+            variant.setSku(vr.sku());
+            variant.setName(vr.name());
+            variant.setSize(vr.size());
+            variant.setColor(vr.color());
+            variant.setPriceAdjustment(vr.priceAdjustment() != null ? vr.priceAdjustment() : 0);
+            variant.setAttributes(vr.attributes());
+            variant.setStatus("ACTIVE");
+            saved.add(productVariantRepository.save(variant));
+        }
+
+        return saved.stream().map(this::toVariantResponse).toList();
     }
 
     public List<ProductVariantResponse> getVariants(UUID productId) {
