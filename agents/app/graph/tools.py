@@ -9,11 +9,12 @@ from langgraph.prebuilt import InjectedState
 
 from app.tools import service_clients as sc
 from app.graph.id_mapper import IdMapper
-from app.memory.redis_store import RedisStore
 
 import structlog
 
 logger = structlog.get_logger()
+
+MAX_RECENT_PRODUCTS = 10
 
 
 # ============================================================
@@ -62,23 +63,13 @@ async def search_products(
         merged = fts_items + rag_only
 
         # ID 마스킹 및 context 업데이트
-        recent_products = []
         if user_id and thread_id:
-            for p in merged:
-                real_id = p.get("id")
-                if real_id:
-                    masked_id = await IdMapper.get_index(thread_id, real_id, "p")
-                    p["id"] = masked_id
-                    recent_products.append({"id": masked_id, "name": p.get("name", "Unknown")})
-
-            if recent_products:
-                if ctx is not None:
-                    ctx["recent_products"] = recent_products
-
-                redis_store = RedisStore()
-                await redis_store.initialize()
-                await redis_store.update_context(thread_id, {"recent_products": recent_products})
-                await redis_store.close()
+            merged = await IdMapper.replace_many(thread_id, merged, {"id": "p"})
+            if ctx is not None:
+                ctx["recent_products"] = [
+                    {"id": p["id"], "name": p.get("name", "Unknown")}
+                    for p in merged if p.get("id")
+                ][:MAX_RECENT_PRODUCTS]
 
         return json.dumps({"content": merged, "total": len(merged)}, ensure_ascii=False)
     except Exception as e:
@@ -93,13 +84,13 @@ async def get_product_details(
     """Get detailed information about a specific product including variants."""
     try:
         real_product_id = await IdMapper.get_real_id(thread_id, product_id)
-        product = await sc.get_product(real_product_id)
-        variants = await sc.get_product_variants(real_product_id)
-        
-        product = await IdMapper.replace_dict_keys(thread_id, product, {"id": "p"})
-        for i, v in enumerate(variants):
-            variants[i] = await IdMapper.replace_dict_keys(thread_id, v, {"id": "v", "product_id": "p"})
-            
+        product, variants = await asyncio.gather(
+            sc.get_product(real_product_id),
+            sc.get_product_variants(real_product_id),
+        )
+
+        [product] = await IdMapper.replace_many(thread_id, [product], {"id": "p"})
+        variants = await IdMapper.replace_many(thread_id, variants, {"id": "v", "product_id": "p"})
         product["variants"] = variants
         return json.dumps(product, ensure_ascii=False)
     except Exception as e:
@@ -132,9 +123,10 @@ async def get_product_reviews(
         result = await sc.get_product_reviews(real_product_id, sort=sort)
         
         if isinstance(result, dict) and "content" in result:
-            for r in result["content"]:
-                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
-                
+            result["content"] = await IdMapper.replace_many(
+                thread_id, result["content"], {"id": "r", "product_id": "p"}
+            )
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -152,8 +144,9 @@ async def search_reviews(
         result = await sc.search_reviews(real_product_id, keyword)
 
         if isinstance(result, dict) and "content" in result:
-            for r in result["content"]:
-                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
+            result["content"] = await IdMapper.replace_many(
+                thread_id, result["content"], {"id": "r", "product_id": "p"}
+            )
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -174,11 +167,13 @@ async def get_recent_reviews(
     """
     try:
         real_product_id = await IdMapper.get_real_id(thread_id, product_id)
+        print(f"id: {product_id}, real_id: {real_product_id}")
         result = await sc.get_recent_reviews(real_product_id, limit)
 
         if isinstance(result, dict) and "reviews" in result:
-            for r in result["reviews"]:
-                await IdMapper.replace_dict_keys(thread_id, r, {"id": "r", "product_id": "p"})
+            result["reviews"] = await IdMapper.replace_many(
+                thread_id, result["reviews"], {"id": "r", "product_id": "p"}
+            )
 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -199,13 +194,10 @@ async def get_cart(
         result = await sc.get_cart(user_id)
         
         if isinstance(result, dict) and "items" in result:
-            for item in result["items"]:
-                await IdMapper.replace_dict_keys(thread_id, item, {
-                    "id": "c",
-                    "product_id": "p",
-                    "variant_id": "v"
-                })
-        
+            result["items"] = await IdMapper.replace_many(
+                thread_id, result["items"], {"id": "c", "product_id": "p", "variant_id": "v"}
+            )
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -235,13 +227,10 @@ async def add_to_cart(
         
         # Usually returns updated cart
         if isinstance(result, dict) and "items" in result:
-            for item in result["items"]:
-                await IdMapper.replace_dict_keys(thread_id, item, {
-                    "id": "c",
-                    "product_id": "p",
-                    "variant_id": "v"
-                })
-                
+            result["items"] = await IdMapper.replace_many(
+                thread_id, result["items"], {"id": "c", "product_id": "p", "variant_id": "v"}
+            )
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -259,13 +248,10 @@ async def remove_from_cart(
         result = await sc.remove_cart_item(user_id, real_item_id)
         
         if isinstance(result, dict) and "items" in result:
-            for item in result["items"]:
-                await IdMapper.replace_dict_keys(thread_id, item, {
-                    "id": "c",
-                    "product_id": "p",
-                    "variant_id": "v"
-                })
-                
+            result["items"] = await IdMapper.replace_many(
+                thread_id, result["items"], {"id": "c", "product_id": "p", "variant_id": "v"}
+            )
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -289,13 +275,10 @@ async def update_cart_item_quantity(
         result = await sc.update_cart_item(user_id, real_item_id, real_product_id, real_variant_id, quantity)
         
         if isinstance(result, dict) and "items" in result:
-            for item in result["items"]:
-                await IdMapper.replace_dict_keys(thread_id, item, {
-                    "id": "c",
-                    "product_id": "p",
-                    "variant_id": "v"
-                })
-                
+            result["items"] = await IdMapper.replace_many(
+                thread_id, result["items"], {"id": "c", "product_id": "p", "variant_id": "v"}
+            )
+
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -312,15 +295,12 @@ async def get_order_details(
         result = await sc.get_order(real_order_id)
         
         if isinstance(result, dict):
-            await IdMapper.replace_dict_keys(thread_id, result, {"id": "o"})
+            [result] = await IdMapper.replace_many(thread_id, [result], {"id": "o"})
             if "items" in result:
-                for item in result["items"]:
-                    await IdMapper.replace_dict_keys(thread_id, item, {
-                        "id": "i",
-                        "product_id": "p",
-                        "variant_id": "v",
-                        "order_id": "o"
-                    })
+                result["items"] = await IdMapper.replace_many(
+                    thread_id, result["items"],
+                    {"id": "i", "product_id": "p", "variant_id": "v", "order_id": "o"},
+                )
                     
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -337,8 +317,7 @@ async def get_user_orders(
         result = await sc.get_user_orders(user_id)
         
         if isinstance(result, list):
-            for order in result:
-                await IdMapper.replace_dict_keys(thread_id, order, {"id": "o"})
+            result = await IdMapper.replace_many(thread_id, result, {"id": "o"})
                 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -363,7 +342,9 @@ async def check_inventory(
         
         result = await sc.check_inventory(real_product_id, real_variant_id, quantity)
         if isinstance(result, dict):
-            await IdMapper.replace_dict_keys(thread_id, result, {"product_id": "p", "variant_id": "v"})
+            [result] = await IdMapper.replace_many(
+                thread_id, [result], {"product_id": "p", "variant_id": "v"}
+            )
             
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -381,8 +362,9 @@ async def get_product_stock(
         result = await sc.get_product_inventory(real_product_id)
         
         if isinstance(result, list):
-            for item in result:
-                await IdMapper.replace_dict_keys(thread_id, item, {"product_id": "p", "variant_id": "v"})
+            result = await IdMapper.replace_many(
+                thread_id, result, {"product_id": "p", "variant_id": "v"}
+            )
                 
         return json.dumps(result, ensure_ascii=False)
     except Exception as e:
@@ -414,33 +396,22 @@ async def rag_search_reviews(
         )
         
         if user_id and thread_id and isinstance(results, dict) and "results" in results:
-            recent_products = []
-            seen = set()
-            for r in results["results"]:
-                pid = r.get("product_id")
-                pname = r.get("product_name")
-                
-                # Replace product_id
-                if pid:
-                    masked_pid = await IdMapper.get_index(thread_id, pid, "p")
-                    r["product_id"] = masked_pid
-                    if masked_pid not in seen:
-                        recent_products.append({"id": masked_pid, "name": pname or "Unknown"})
+            results["results"] = await IdMapper.replace_many(
+                thread_id, results["results"], {"id": "r", "product_id": "p"}
+            )
+
+            if ctx is not None:
+                seen: set[str] = set()
+                recent_products = []
+                for r in results["results"]:
+                    masked_pid = r.get("product_id")
+                    if masked_pid and masked_pid not in seen:
+                        recent_products.append({
+                            "id": masked_pid,
+                            "name": r.get("product_name") or "Unknown",
+                        })
                         seen.add(masked_pid)
-                        
-                # Replace review_id
-                if r.get("id"):
-                    r["id"] = await IdMapper.get_index(thread_id, r["id"], "r")
-            
-            if recent_products:
-                if ctx is not None:
-                    ctx["recent_products"] = recent_products
-                
-                from app.memory.redis_store import RedisStore
-                redis_store = RedisStore()
-                await redis_store.initialize()
-                await redis_store.update_context(thread_id, {"recent_products": recent_products})
-                await redis_store.close()
+                ctx["recent_products"] = recent_products[:MAX_RECENT_PRODUCTS]
 
         return json.dumps(results, ensure_ascii=False)
     except Exception as e:
@@ -466,7 +437,7 @@ async def rag_search_policies(
 # ============================================================
 
 SEARCH_AGENT_TOOLS = [search_products, get_product_details, get_categories]
-REVIEW_AGENT_TOOLS = [get_product_reviews, get_recent_reviews, search_reviews, rag_search_reviews]
+REVIEW_AGENT_TOOLS = [get_recent_reviews, search_reviews]
 CART_AGENT_TOOLS = [get_cart, add_to_cart, remove_from_cart, update_cart_item_quantity]
 CUSTOMER_SERVICE_AGENT_TOOLS = [get_order_details, get_user_orders, rag_search_policies]
 

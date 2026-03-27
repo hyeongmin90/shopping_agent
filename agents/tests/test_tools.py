@@ -30,12 +30,12 @@ class TestAgentTools(unittest.IsolatedAsyncioTestCase):
 
         # Act
         result_str = await search_products.ainvoke({
-            "keyword": "Shirt"
+            "search": "Shirt"
         })
 
         # Assert
         mock_search.assert_awaited_once_with(
-            keyword="Shirt",
+            search="Shirt",
             category=None,
             brand=None,
             min_price=None,
@@ -50,7 +50,7 @@ class TestAgentTools(unittest.IsolatedAsyncioTestCase):
     async def test_search_products_exception(self, mock_search):
         mock_search.side_effect = Exception("Service unavailable")
         
-        result_str = await search_products.ainvoke({"keyword": "Shirt"})
+        result_str = await search_products.ainvoke({"search": "Shirt"})
         
         result_json = json.loads(result_str)
         self.assertIn("error", result_json)

@@ -111,20 +111,25 @@ def _extract_final_response(state: SubAgentState) -> str:
 
 @tool
 async def product_search_agent_tool(
-    query: str, 
-    user_id: Annotated[str, InjectedState("user_id")], 
+    query: str,
+    user_id: Annotated[str, InjectedState("user_id")],
     thread_id: Annotated[str, InjectedState("thread_id")],
     ctx: Annotated[dict, InjectedState("context")],
     config: RunnableConfig
 ) -> str:
     """상품을 검색하는 에이전트를 호출합니다. 사용자가 상품 추천, 검색, 조회를 원할 때 이 도구를 사용합니다."""
-    # load context
     logger.info("Product search Agent called")
     filtered_ctx = {"recent_products": ctx.get("recent_products", [])}
-    logger.info(f"Product search Agent context: {filtered_ctx}")
-    
+
     initial_state = {"messages": [HumanMessage(content=query)], "user_id": user_id, "thread_id": thread_id, "context": filtered_ctx}
     final_state = await product_search_graph.ainvoke(initial_state, config)
+
+    # sub-agent가 업데이트한 recent_products를 슈퍼바이저 context에 전파
+    updated_products = final_state.get("context", {}).get("recent_products")
+    if updated_products and ctx is not None:
+        ctx["recent_products"] = updated_products
+        logger.info("recent_products propagated to supervisor", count=len(updated_products))
+
     return _extract_final_response(final_state)
 
 @tool

@@ -59,3 +59,7 @@ postgres-*-data/
 
 # Claude
 .claude/
+
+# Langgraph
+.langgraph_api/
+langgraph.json

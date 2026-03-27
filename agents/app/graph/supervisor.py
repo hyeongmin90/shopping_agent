@@ -18,6 +18,7 @@ import structlog
 
 logger = structlog.get_logger()
 
+
 # 대화 이력이 마지막으로 사용된 후 유지되는 시간 (분)
 # 이 시간이 지나면 Redis TTL에 의해 체크포인트가 자동 삭제되어 대화가 초기화됩니다.
 CONVERSATION_TTL_MINUTES = int(getattr(settings, "CONVERSATION_TTL", 30))
